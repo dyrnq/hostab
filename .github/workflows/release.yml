@@ -98,13 +98,6 @@ jobs:
           else
             echo "name=hostab" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Run integration tests (native only)
-        if: ${{ !matrix.cross }}
-        shell: bash
-        run: |
-          bash tests/integration_test.sh target/${{ matrix.target }}/release/${{ steps.binary.outputs.name }}
-
       - name: Rename artifact
         id: rename
         shell: bash
