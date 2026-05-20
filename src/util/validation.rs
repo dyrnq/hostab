@@ -86,9 +86,13 @@ pub fn validate_secure_path(path: &Path) -> Result<(), std::io::Error> {
 /// Check if running as root (Unix only; on Windows always returns false)
 pub fn is_root() -> bool {
     #[cfg(unix)]
-    unsafe { libc::geteuid() == 0 }
+    {
+        unsafe { libc::geteuid() == 0 }
+    }
     #[cfg(not(unix))]
-    false
+    {
+        false
+    }
 }
 
 #[cfg(test)]

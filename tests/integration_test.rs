@@ -1,7 +1,11 @@
 use std::process::Command;
 
 fn hostab(args: &[&str]) -> String {
-    let bin = if cfg!(windows) { "target/release/hostab.exe" } else { "target/release/hostab" };
+    let bin = if cfg!(windows) {
+        "target/release/hostab.exe"
+    } else {
+        "target/release/hostab"
+    };
     let output = Command::new(bin)
         .args(args)
         .output()
@@ -10,7 +14,11 @@ fn hostab(args: &[&str]) -> String {
 }
 
 fn hostab_with_file(hosts_file: &str, args: &[&str]) -> String {
-    let bin = if cfg!(windows) { "target/release/hostab.exe" } else { "target/release/hostab" };
+    let bin = if cfg!(windows) {
+        "target/release/hostab.exe"
+    } else {
+        "target/release/hostab"
+    };
     let mut all_args = vec!["--hosts-file", hosts_file];
     all_args.extend(args);
     let output = Command::new(bin)
@@ -81,7 +89,10 @@ fn test_rm_by_ip() {
 
 #[test]
 fn test_filter() {
-    let out = hostab_with_file("tests/hosts.test", &["e", "list", "-f", "prod", "-o", "raw"]);
+    let out = hostab_with_file(
+        "tests/hosts.test",
+        &["e", "list", "-f", "prod", "-o", "raw"],
+    );
     assert!(out.contains("prod.local"), "should match substring");
 }
 
@@ -93,7 +104,10 @@ fn test_disable_enable() {
 
     hostab_with_file(path, &["e", "disable", "api.local", "-q"]);
     let raw = std::fs::read_to_string(path).unwrap();
-    assert!(raw.contains("# 10.0.0.1 api.local"), "should comment out api.local");
+    assert!(
+        raw.contains("# 10.0.0.1 api.local"),
+        "should comment out api.local"
+    );
     assert!(raw.contains("10.0.0.1 app.local"), "should keep app.local");
 
     hostab_with_file(path, &["e", "enable", "api.local", "-q"]);
@@ -124,27 +138,44 @@ fn test_edit() {
 
     hostab_with_file(path, &["e", "edit", "api.local", "--ip", "10.0.0.99", "-q"]);
     let raw = std::fs::read_to_string(path).unwrap();
-    assert!(raw.contains("10.0.0.1 app.local"), "old IP should keep app.local");
-    assert!(raw.contains("10.0.0.99 api.local"), "new IP should have api.local");
+    assert!(
+        raw.contains("10.0.0.1 app.local"),
+        "old IP should keep app.local"
+    );
+    assert!(
+        raw.contains("10.0.0.99 api.local"),
+        "new IP should have api.local"
+    );
 }
 
 #[test]
 fn test_verify() {
     let out = hostab_with_file("tests/hosts.test", &["verify"]);
-    assert!(out.contains("localhost"), "should report duplicate localhost");
+    assert!(
+        out.contains("localhost"),
+        "should report duplicate localhost"
+    );
     assert!(out.contains("LINE"), "should have table header");
 }
 
 #[test]
 fn test_merge() {
     let dir = tempfile::tempdir().unwrap();
-    let a = dir.path().join("a"); std::fs::write(&a, "10.99.0.1 merge-a.local\n").unwrap();
-    let b = dir.path().join("b"); std::fs::write(&b, "10.99.0.2 merge-b.local\n").unwrap();
+    let a = dir.path().join("a");
+    std::fs::write(&a, "10.99.0.1 merge-a.local\n").unwrap();
+    let b = dir.path().join("b");
+    std::fs::write(&b, "10.99.0.2 merge-b.local\n").unwrap();
     let tgt = dir.path().join("merged");
 
     hostab(&[
-        "merge", "-s", a.to_str().unwrap(), "-s", b.to_str().unwrap(),
-        "-t", tgt.to_str().unwrap(), "-q",
+        "merge",
+        "-s",
+        a.to_str().unwrap(),
+        "-s",
+        b.to_str().unwrap(),
+        "-t",
+        tgt.to_str().unwrap(),
+        "-q",
     ]);
     let raw = std::fs::read_to_string(&tgt).unwrap();
     assert!(raw.contains("merge-a.local"), "should have file a content");
