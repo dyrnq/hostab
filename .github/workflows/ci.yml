@@ -58,6 +58,10 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install NASM (Windows)
+        if: matrix.os == 'windows-2022'
+        uses: ilammy/setup-nasm@v1
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
