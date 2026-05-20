@@ -89,7 +89,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Run unit tests
-        run: cargo test --release --target ${{ matrix.target }}
+        run: cargo test --release
 
       - name: Run integration tests
         shell: bash
@@ -100,4 +100,4 @@ jobs:
             HOSTAB_BIN="target/${{ matrix.target }}/release/hostab"
           fi
           export HOSTAB_BIN
-          cargo test --test integration_test --release --target ${{ matrix.target }}
+          cargo test --test integration_test --release
