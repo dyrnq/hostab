@@ -55,9 +55,14 @@ jobs:
             target: aarch64-apple-darwin
             cross: false
 
-          # Windows x86_64
+          # Windows x86_64 (MSVC)
           - os: windows-2022
             target: x86_64-pc-windows-msvc
+            cross: false
+
+          # Windows x86_64 (MinGW)
+          - os: windows-2022
+            target: x86_64-pc-windows-gnu
             cross: false
 
     steps:
@@ -68,6 +73,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install NASM (Windows MSVC)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        uses: ilammy/setup-nasm@v1
 
       - name: Install cross (for cross-compilation)
         if: matrix.cross
@@ -186,7 +195,8 @@ jobs:
             - **armv7-unknown-linux-musleabihf** — Linux ARMv7 (static musl)
             - **x86_64-apple-darwin** — macOS Intel
             - **aarch64-apple-darwin** — macOS Apple Silicon
-            - **x86_64-pc-windows-msvc** — Windows x86_64
+            - **x86_64-pc-windows-msvc** — Windows x86_64 (MSVC)
+            - **x86_64-pc-windows-gnu** — Windows x86_64 (MinGW)
 
           files: release-assets/*
           draft: false

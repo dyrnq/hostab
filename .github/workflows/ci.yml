@@ -45,21 +45,35 @@ jobs:
 
   # ---- Unit tests (all platforms) ----
   unit-tests:
-    name: Unit (${{ matrix.os }})
+    name: Unit (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14, windows-2022]
+        include:
+          - os: ubuntu-24.04
+            name: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-14
+            name: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-2022
+            name: windows-msvc
+            target: x86_64-pc-windows-msvc
+          - os: windows-2022
+            name: windows-mingw
+            target: x86_64-pc-windows-gnu
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-      - name: Install NASM (Windows)
-        if: matrix.os == 'windows-2022'
+      - name: Install NASM (Windows MSVC)
+        if: matrix.name == 'windows-msvc'
         uses: ilammy/setup-nasm@v1
 
       - name: Cache cargo
@@ -69,13 +83,21 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          key: ${{ matrix.name }}-cargo-${{ hashFiles('Cargo.lock') }}
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Run unit tests
-        run: cargo test --release
+        run: cargo test --release --target ${{ matrix.target }}
 
       - name: Run integration tests
-        run: cargo test --test integration_test --release
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            HOSTAB_BIN="target/${{ matrix.target }}/release/hostab.exe"
+          else
+            HOSTAB_BIN="target/${{ matrix.target }}/release/hostab"
+          fi
+          export HOSTAB_BIN
+          cargo test --test integration_test --release --target ${{ matrix.target }}
