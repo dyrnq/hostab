@@ -1,0 +1,5 @@
+/target
+.dev
+.qwen
+qw.sh
+tests/*.bak
