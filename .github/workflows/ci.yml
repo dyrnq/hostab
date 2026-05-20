@@ -74,10 +74,4 @@ jobs:
         run: cargo test --release
 
       - name: Run integration tests
-        if: matrix.os != 'windows-2022'
-        run: bash tests/integration_test.sh ./target/release/hostab
-
-      - name: Run integration tests (Windows)
-        if: matrix.os == 'windows-2022'
-        run: bash tests/integration_test.sh ./target/release/hostab.exe
-        shell: bash
+        run: cargo test --test integration_test --release
