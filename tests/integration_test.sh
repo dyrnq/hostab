@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
+set -u
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -14,12 +16,12 @@ pass_count=0; fail_count=0
 pass() { echo -e "  ${GREEN}PASS${NC} $1"; pass_count=$((pass_count + 1)); }
 fail() { echo -e "  ${RED}FAIL${NC} $1 — $2"; fail_count=$((fail_count + 1)); }
 assert_contains() {
-    local d="$1" n="$2" h="$3"
-    if echo "$h" | grep -qF "$n"; then pass "$d"; else fail "$d" "expected to contain '$n'"; fi
+    _d="$1" _n="$2" _h="$3"
+    if echo "$_h" | grep -qF "$_n"; then pass "$_d"; else fail "$_d" "expected to contain '$_n'"; fi
 }
 assert_not_contains() {
-    local d="$1" n="$2" h="$3"
-    if ! echo "$h" | grep -qF "$n"; then pass "$d"; else fail "$d" "expected NOT to contain '$n'"; fi
+    _d="$1" _n="$2" _h="$3"
+    if ! echo "$_h" | grep -qF "$_n"; then pass "$_d"; else fail "$_d" "expected NOT to contain '$_n'"; fi
 }
 
 cleanup() { rm -rf "$WORK_DIR"; }
