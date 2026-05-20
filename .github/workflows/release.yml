@@ -84,11 +84,6 @@ jobs:
         run: |
           cargo build --release --target ${{ matrix.target }}
 
-      - name: Build (cross)
-        if: matrix.cross
-        run: |
-          cross build --release --target ${{ matrix.target }}
-
       - name: Set binary name
         id: binary
         shell: bash
@@ -98,6 +93,19 @@ jobs:
           else
             echo "name=hostab" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Run integration tests
+        if: ${{ !matrix.cross }}
+        shell: bash
+        env:
+          HOSTAB_BIN: target/${{ matrix.target }}/release/${{ steps.binary.outputs.name }}
+        run: cargo test --test integration_test --release
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: |
+          cross build --release --target ${{ matrix.target }}
+
       - name: Rename artifact
         id: rename
         shell: bash

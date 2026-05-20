@@ -1,12 +1,17 @@
 use std::process::Command;
 
-fn hostab(args: &[&str]) -> String {
-    let bin = if cfg!(windows) {
+fn hostab_bin() -> &'static str {
+    if let Ok(bin) = std::env::var("HOSTAB_BIN") {
+        Box::leak(bin.into_boxed_str())
+    } else if cfg!(windows) {
         "target/release/hostab.exe"
     } else {
         "target/release/hostab"
-    };
-    let output = Command::new(bin)
+    }
+}
+
+fn hostab(args: &[&str]) -> String {
+    let output = Command::new(hostab_bin())
         .args(args)
         .output()
         .expect("failed to run hostab");
@@ -14,14 +19,9 @@ fn hostab(args: &[&str]) -> String {
 }
 
 fn hostab_with_file(hosts_file: &str, args: &[&str]) -> String {
-    let bin = if cfg!(windows) {
-        "target/release/hostab.exe"
-    } else {
-        "target/release/hostab"
-    };
     let mut all_args = vec!["--hosts-file", hosts_file];
     all_args.extend(args);
-    let output = Command::new(bin)
+    let output = Command::new(hostab_bin())
         .args(&all_args)
         .output()
         .expect("failed to run hostab");
