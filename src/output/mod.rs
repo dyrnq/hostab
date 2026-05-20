@@ -1,2 +1,2 @@
-pub mod table;
 pub mod json;
+pub mod table;

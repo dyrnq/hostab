@@ -22,17 +22,18 @@ pub fn is_valid_hostname(hostname: &str) -> bool {
         return false;
     }
 
-    let hostname_re = Regex::new(
-        r"^(?i)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
-    )
-    .unwrap();
+    let hostname_re =
+        Regex::new(r"^(?i)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+            .unwrap();
 
     hostname_re.is_match(hostname)
 }
 
 /// Validate a comment string (no newlines or control characters)
 pub fn is_valid_comment(comment: &str) -> bool {
-    !comment.contains('\n') && !comment.contains('\r') && comment.chars().all(|c| !c.is_control() || c == '\t')
+    !comment.contains('\n')
+        && !comment.contains('\r')
+        && comment.chars().all(|c| !c.is_control() || c == '\t')
 }
 
 /// Normalize an IP address to its canonical form
@@ -54,20 +55,29 @@ pub fn validate_secure_path(path: &Path) -> Result<(), std::io::Error> {
 
     // Check for null bytes
     if path_str.contains('\0') {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Path contains null bytes"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Path contains null bytes",
+        ));
     }
 
     // Check for path traversal
     for component in path.components() {
         if component == std::path::Component::ParentDir {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Path traversal detected: {}", path.display())));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Path traversal detected: {}", path.display()),
+            ));
         }
     }
 
     // Check for encoded traversal patterns
     let lower = path_str.to_lowercase();
     if lower.contains("%2e%2e") || lower.contains("..%2f") || lower.contains("%2e%2e%2f") {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Encoded path traversal detected: {}", path.display())));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Encoded path traversal detected: {}", path.display()),
+        ));
     }
 
     Ok(())

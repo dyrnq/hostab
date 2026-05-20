@@ -15,6 +15,9 @@ fn main() {
 
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
     println!("cargo:rustc-env=BUILD_DATE={}", build_date);
-    println!("cargo:rustc-env=TARGET_TRIPLE={}", std::env::var("TARGET").unwrap_or_else(|_| "unknown".to_string()));
+    println!(
+        "cargo:rustc-env=TARGET_TRIPLE={}",
+        std::env::var("TARGET").unwrap_or_else(|_| "unknown".to_string())
+    );
     println!("cargo:rerun-if-changed=.git/HEAD");
 }

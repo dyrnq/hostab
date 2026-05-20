@@ -1,6 +1,6 @@
 # hostab
 
-[![CI](https://github.com/dyrnq/hostab/actions/workflows/ci.yml/badge.svg)](https://github.com/dyrnq/hostab/actions/workflows/ci.yml)
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **Your dev tool to manage `/etc/hosts` like a pro — written in Rust.**

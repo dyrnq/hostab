@@ -1,5 +1,5 @@
-use regex::Regex;
 use super::model::Entry;
+use regex::Regex;
 
 /// Parse a hosts file from a string
 pub fn parse(content: &str) -> Vec<Entry> {

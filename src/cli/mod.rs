@@ -72,9 +72,7 @@ pub enum Commands {
     },
 
     /// Generate shell completion scripts
-    Completion {
-        shell: String,
-    },
+    Completion { shell: String },
 
     /// Show detailed version info
     Version,
@@ -198,7 +196,11 @@ pub fn compact_rows(rows: &[Row]) -> Vec<Row> {
             map.remove(&ip).map(|(hosts, comments)| Row {
                 ip,
                 host: hosts.join(" "),
-                comment: if comments.is_empty() { None } else { Some(comments.join("; ")) },
+                comment: if comments.is_empty() {
+                    None
+                } else {
+                    Some(comments.join("; "))
+                },
             })
         })
         .collect()
@@ -206,7 +208,9 @@ pub fn compact_rows(rows: &[Row]) -> Vec<Row> {
 
 /// Print rows in the requested output format
 pub fn print_output(cli: &Cli, rows: &[Row]) {
-    if cli.quiet { return; }
+    if cli.quiet {
+        return;
+    }
 
     let output_str = match cli.out.as_str() {
         "json" => crate::output::json::format_json_rows(rows),

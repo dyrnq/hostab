@@ -21,7 +21,9 @@ pub struct Store {
 
 impl Store {
     pub fn new(path: &Path) -> Self {
-        Self { path: path.to_path_buf() }
+        Self {
+            path: path.to_path_buf(),
+        }
     }
 
     pub fn with_default_path() -> Self {
@@ -84,7 +86,12 @@ impl Store {
     }
 
     /// Add/merge an entry
-    pub fn add_entry(&self, ip: &str, hosts: &[String], comment: Option<&str>) -> io::Result<Vec<String>> {
+    pub fn add_entry(
+        &self,
+        ip: &str,
+        hosts: &[String],
+        comment: Option<&str>,
+    ) -> io::Result<Vec<String>> {
         let mut entries = self.load()?;
         let mut duplicates = Vec::new();
 
@@ -161,14 +168,23 @@ impl Store {
         for entry in &mut entries {
             let mut split: Vec<String> = Vec::new();
             entry.hostnames.retain(|h| {
-                if hostnames.contains(h) { split.push(h.clone()); false } else { true }
+                if hostnames.contains(h) {
+                    split.push(h.clone());
+                    false
+                } else {
+                    true
+                }
             });
             if !split.is_empty() {
                 for h in &split {
                     next_id += 1;
                     new_entries.push(Entry {
-                        id: next_id, ip: entry.ip.clone(), hostnames: vec![h.clone()],
-                        comment: entry.comment.clone(), disabled: true, raw: None,
+                        id: next_id,
+                        ip: entry.ip.clone(),
+                        hostnames: vec![h.clone()],
+                        comment: entry.comment.clone(),
+                        disabled: true,
+                        raw: None,
                     });
                     count += 1;
                 }
@@ -184,7 +200,8 @@ impl Store {
     pub fn enable_hostname(&self, hostnames: &[String]) -> io::Result<usize> {
         let mut entries = self.load()?;
         let mut count = 0;
-        let mut merge: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        let mut merge: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
 
         entries.retain(|e| {
             if e.disabled && e.hostnames.iter().any(|h| hostnames.contains(h)) {
@@ -202,10 +219,21 @@ impl Store {
 
         for (ip, hosts) in &merge {
             if let Some(existing) = entries.iter_mut().find(|e| e.ip == *ip && !e.disabled) {
-                for h in hosts { if !existing.hostnames.contains(h) { existing.hostnames.push(h.clone()); } }
+                for h in hosts {
+                    if !existing.hostnames.contains(h) {
+                        existing.hostnames.push(h.clone());
+                    }
+                }
             } else {
                 let id = entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
-                entries.push(Entry { id, ip: ip.clone(), hostnames: hosts.clone(), comment: None, disabled: false, raw: None });
+                entries.push(Entry {
+                    id,
+                    ip: ip.clone(),
+                    hostnames: hosts.clone(),
+                    comment: None,
+                    disabled: false,
+                    raw: None,
+                });
             }
         }
 
@@ -216,7 +244,9 @@ impl Store {
     /// Toggle a hostname: if any entry with it is enabled → disable; else → enable.
     pub fn toggle_hostname(&self, hostname: &str) -> io::Result<String> {
         let entries = self.load()?;
-        let any_enabled = entries.iter().any(|e| !e.disabled && e.hostnames.contains(&hostname.to_string()));
+        let any_enabled = entries
+            .iter()
+            .any(|e| !e.disabled && e.hostnames.contains(&hostname.to_string()));
         if any_enabled {
             self.disable_hostname(&[hostname.to_string()])?;
             Ok(format!("disabled {}", hostname))
@@ -236,7 +266,9 @@ impl Store {
                 count += 1;
             }
         }
-        if count > 0 { self.safe_save(&entries)?; }
+        if count > 0 {
+            self.safe_save(&entries)?;
+        }
         Ok(count)
     }
 
@@ -250,7 +282,9 @@ impl Store {
                 count += 1;
             }
         }
-        if count > 0 { self.safe_save(&entries)?; }
+        if count > 0 {
+            self.safe_save(&entries)?;
+        }
         Ok(count)
     }
 
@@ -283,7 +317,9 @@ impl Store {
         }
         entries.retain(|e| !e.hostnames.is_empty());
 
-        if moved == 0 { return Ok(0); }
+        if moved == 0 {
+            return Ok(0);
+        }
 
         // Add to new IP
         let was_disabled = to_add.iter().any(|(d, _)| *d);
@@ -292,12 +328,18 @@ impl Store {
             if !existing.hostnames.contains(&hostname.to_string()) {
                 existing.hostnames.push(hostname.to_string());
             }
-            if was_disabled { existing.disabled = true; }
+            if was_disabled {
+                existing.disabled = true;
+            }
         } else {
             let id = entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
             entries.push(Entry {
-                id, ip: new_ip.to_string(), hostnames: vec![hostname.to_string()],
-                comment, disabled: was_disabled, raw: None,
+                id,
+                ip: new_ip.to_string(),
+                hostnames: vec![hostname.to_string()],
+                comment,
+                disabled: was_disabled,
+                raw: None,
             });
         }
 
@@ -313,7 +355,8 @@ impl Store {
         };
 
         let mut issues: Vec<(usize, String, String, String)> = Vec::new();
-        let mut seen: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+        let mut seen: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
 
         for (line_no, line) in content.lines().enumerate() {
             let ln = line_no + 1;
@@ -335,9 +378,16 @@ impl Store {
             }
             for host in &parts[1..] {
                 let host = host.trim();
-                if host.starts_with('#') { break; }
+                if host.starts_with('#') {
+                    break;
+                }
                 if !validation::is_valid_hostname(host) {
-                    issues.push((ln, ip.clone(), host.to_string(), format!("invalid hostname")));
+                    issues.push((
+                        ln,
+                        ip.clone(),
+                        host.to_string(),
+                        format!("invalid hostname"),
+                    ));
                 }
                 seen.entry(host.to_lowercase()).or_default().push(ln);
             }
@@ -384,7 +434,9 @@ mod tests {
         fs::write(&path, "").unwrap();
         let store = Store::new(&path);
 
-        store.add_entry("10.0.0.1", &["app.local".into()], None).unwrap();
+        store
+            .add_entry("10.0.0.1", &["app.local".into()], None)
+            .unwrap();
         let entries = store.load().unwrap();
         assert_eq!(entries.len(), 1);
 
@@ -400,8 +452,12 @@ mod tests {
         fs::write(&path, "").unwrap();
         let store = Store::new(&path);
 
-        store.add_entry("10.0.0.1", &["a.local".into()], None).unwrap();
-        store.add_entry("10.0.0.2", &["b.local".into()], None).unwrap();
+        store
+            .add_entry("10.0.0.1", &["a.local".into()], None)
+            .unwrap();
+        store
+            .add_entry("10.0.0.2", &["b.local".into()], None)
+            .unwrap();
         assert_eq!(store.load().unwrap().len(), 2);
 
         store.remove_by_ip("10.0.0.1").unwrap();

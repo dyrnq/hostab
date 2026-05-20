@@ -1,2 +1,2 @@
-pub mod lock;
 pub mod file;
+pub mod lock;
