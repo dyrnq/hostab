@@ -65,9 +65,9 @@ fn fetch(src: &str) -> io::Result<String> {
     if src.starts_with("http://") || src.starts_with("https://") {
         ureq::get(src)
             .call()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
+            .map_err(|e| io::Error::other(e.to_string()))?
             .into_string()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+            .map_err(|e| io::Error::other(e.to_string()))
     } else {
         fs::read_to_string(src)
     }

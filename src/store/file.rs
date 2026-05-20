@@ -349,10 +349,7 @@ impl Store {
 
     /// Verify the hosts file. Returns structured issues (line, ip, host, issue).
     pub fn verify(&self) -> io::Result<Vec<(usize, String, String, String)>> {
-        let content = match fs::read_to_string(&self.path) {
-            Ok(c) => c,
-            Err(e) => return Err(e),
-        };
+        let content = fs::read_to_string(&self.path)?;
 
         let mut issues: Vec<(usize, String, String, String)> = Vec::new();
         let mut seen: std::collections::HashMap<String, Vec<usize>> =
@@ -370,10 +367,10 @@ impl Store {
             }
             let ip = parts[0].to_string();
             if !validation::is_valid_ip(&ip) {
-                issues.push((ln, ip.clone(), "-".into(), format!("invalid IP")));
+                issues.push((ln, ip.clone(), "-".into(), "invalid IP".to_string()));
             }
             if parts.len() < 2 {
-                issues.push((ln, ip.clone(), "-".into(), format!("missing hostname")));
+                issues.push((ln, ip.clone(), "-".into(), "missing hostname".to_string()));
                 continue;
             }
             for host in &parts[1..] {
@@ -386,7 +383,7 @@ impl Store {
                         ln,
                         ip.clone(),
                         host.to_string(),
-                        format!("invalid hostname"),
+                        "invalid hostname".to_string(),
                     ));
                 }
                 seen.entry(host.to_lowercase()).or_default().push(ln);
@@ -398,7 +395,7 @@ impl Store {
                 for &ln in lines {
                     // Find the line content
                     if let Some(raw) = content.lines().nth(ln - 1) {
-                        let parts: Vec<&str> = raw.trim().split_whitespace().collect();
+                        let parts: Vec<&str> = raw.split_whitespace().collect();
                         let ip = parts.first().map(|s| s.to_string()).unwrap_or_default();
                         issues.push((ln, ip, hostname.clone(), "duplicate".into()));
                     }

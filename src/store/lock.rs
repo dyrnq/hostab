@@ -29,10 +29,7 @@ impl FileLock {
 
     /// Try to acquire a lock, returning immediately if not available
     pub fn try_lock(&mut self) -> io::Result<bool> {
-        let file = match File::create(&self.lock_path) {
-            Ok(f) => f,
-            Err(e) => return Err(e),
-        };
+        let file = File::create(&self.lock_path)?;
         match fs2::FileExt::try_lock_exclusive(&file) {
             Ok(()) => {
                 self.lock_file = Some(file);

@@ -28,7 +28,7 @@ pub fn handle_list(
         if let Some(ref re) = re {
             let ok = re.is_match(&entry.ip)
                 || entry.hostnames.iter().any(|h| re.is_match(h))
-                || entry.comment.as_ref().map_or(false, |c| re.is_match(c));
+                || entry.comment.as_ref().is_some_and(|c| re.is_match(c));
             if !ok {
                 continue;
             }
