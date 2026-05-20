@@ -1,8 +1,8 @@
-use std::io::Write;
 use std::process::Command;
 
 fn hostab(args: &[&str]) -> String {
-    let output = Command::new("target/release/hostab")
+    let bin = if cfg!(windows) { "target/release/hostab.exe" } else { "target/release/hostab" };
+    let output = Command::new(bin)
         .args(args)
         .output()
         .expect("failed to run hostab");
@@ -10,9 +10,10 @@ fn hostab(args: &[&str]) -> String {
 }
 
 fn hostab_with_file(hosts_file: &str, args: &[&str]) -> String {
+    let bin = if cfg!(windows) { "target/release/hostab.exe" } else { "target/release/hostab" };
     let mut all_args = vec!["--hosts-file", hosts_file];
     all_args.extend(args);
-    let output = Command::new("target/release/hostab")
+    let output = Command::new(bin)
         .args(&all_args)
         .output()
         .expect("failed to run hostab");
