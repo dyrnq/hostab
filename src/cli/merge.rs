@@ -63,11 +63,12 @@ pub fn handle(cli: &crate::cli::Cli, srcs: &[String], target: Option<&PathBuf>) 
 
 fn fetch(src: &str) -> io::Result<String> {
     if src.starts_with("http://") || src.starts_with("https://") {
-        ureq::get(src)
+        let response = ureq::get(src)
             .call()
-            .map_err(|e| io::Error::other(e.to_string()))?
-            .into_string()
-            .map_err(|e| io::Error::other(e.to_string()))
+            .map_err(|e| io::Error::other(format!("HTTP request failed: {}", e)))?;
+        let mut body = response.into_body();
+        body.read_to_string()
+            .map_err(|e| io::Error::other(format!("Read response body failed: {}", e)))
     } else {
         fs::read_to_string(src)
     }

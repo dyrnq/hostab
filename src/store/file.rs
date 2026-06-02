@@ -202,6 +202,7 @@ impl Store {
         let mut count = 0;
         let mut merge: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
+        let mut kept_disabled: Vec<Entry> = Vec::new();
 
         entries.retain(|e| {
             if e.disabled && e.hostnames.iter().any(|h| hostnames.contains(h)) {
@@ -211,11 +212,33 @@ impl Store {
                         count += 1;
                     }
                 }
+                // Keep non-matching hostnames as a separate disabled entry
+                let remaining: Vec<String> = e
+                    .hostnames
+                    .iter()
+                    .filter(|h| !hostnames.contains(*h))
+                    .cloned()
+                    .collect();
+                if !remaining.is_empty() {
+                    kept_disabled.push(Entry {
+                        id: 0,
+                        ip: e.ip.clone(),
+                        hostnames: remaining,
+                        comment: e.comment.clone(),
+                        disabled: true,
+                        raw: None,
+                    });
+                }
                 false
             } else {
                 true
             }
         });
+
+        for entry in &mut kept_disabled {
+            entry.id = entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
+        }
+        entries.append(&mut kept_disabled);
 
         for (ip, hosts) in &merge {
             if let Some(existing) = entries.iter_mut().find(|e| e.ip == *ip && !e.disabled) {
@@ -322,7 +345,7 @@ impl Store {
         }
 
         // Add to new IP
-        let was_disabled = to_add.iter().any(|(d, _)| *d);
+        let was_disabled = to_add.iter().all(|(d, _)| *d);
         let comment = to_add.into_iter().find_map(|(_, c)| c);
         if let Some(existing) = entries.iter_mut().find(|e| e.ip == new_ip) {
             if !existing.hostnames.contains(&hostname.to_string()) {

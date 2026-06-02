@@ -19,7 +19,19 @@ pub fn handle(cli: &Cli, hosts: &[String], local: bool) {
 }
 
 fn resolve_dns(hosts: &[String]) {
-    let resolver = match hickory_resolver::TokioAsyncResolver::tokio_from_system_conf() {
+    let (config, _opts) = match hickory_resolver::system_conf::read_system_conf() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("DNS init error: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let resolver = match hickory_resolver::TokioResolver::builder_with_config(
+        config,
+        hickory_resolver::net::runtime::TokioRuntimeProvider::default(),
+    )
+    .build()
+    {
         Ok(r) => r,
         Err(e) => {
             eprintln!("DNS init error: {}", e);
@@ -37,7 +49,7 @@ fn resolve_dns(hosts: &[String]) {
                 resolver.reverse_lookup(host_stripped.parse::<std::net::IpAddr>().unwrap()),
             ) {
                 Ok(names) => {
-                    for name in names {
+                    for name in names.answers() {
                         rows.push(ResolveRow {
                             name: name.to_string().trim_end_matches('.').to_string(),
                             addr: host.to_string(),
@@ -51,7 +63,7 @@ fn resolve_dns(hosts: &[String]) {
         } else {
             match rt.block_on(resolver.lookup_ip(host_stripped)) {
                 Ok(addrs) => {
-                    for addr in addrs {
+                    for addr in addrs.iter() {
                         rows.push(ResolveRow {
                             name: host.to_string(),
                             addr: addr.to_string(),
