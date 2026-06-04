@@ -131,4 +131,56 @@ mod tests {
         assert!(validate_secure_path(Path::new("/etc/../hosts")).is_err());
         assert!(validate_secure_path(Path::new("/etc/\0hosts")).is_err());
     }
+
+    #[test]
+    fn test_valid_ipv6_compressed() {
+        assert!(is_valid_ip("::"));
+        assert!(is_valid_ip("::1"));
+        assert!(is_valid_ip("fe80::1"));
+        assert!(is_valid_ip("2001:db8::1"));
+    }
+
+    #[test]
+    fn test_valid_ip_boundary() {
+        assert!(!is_valid_ip(""));
+        assert!(!is_valid_ip("256.0.0.1"));
+        assert!(is_valid_ip("0.0.0.0"));
+        assert!(is_valid_ip("255.255.255.255"));
+    }
+
+    #[test]
+    fn test_valid_hostname_long() {
+        // 63.63.63.61 = exactly 253 chars (RFC 1035 max)
+        let long =
+            "a".repeat(63) + "." + &"b".repeat(63) + "." + &"c".repeat(63) + "." + &"d".repeat(61);
+        assert_eq!(long.len(), 253);
+        assert!(is_valid_hostname(&long));
+
+        let too_long = long.clone() + "e";
+        assert!(!is_valid_hostname(&too_long));
+    }
+
+    #[test]
+    fn test_valid_hostname_single_label() {
+        assert!(is_valid_hostname("a"));
+        assert!(!is_valid_hostname("-start"));
+        assert!(!is_valid_hostname("end-"));
+        assert!(is_valid_hostname("a-b"));
+    }
+
+    #[test]
+    fn test_valid_comment() {
+        assert!(is_valid_comment("normal comment"));
+        assert!(!is_valid_comment("line1\nline2"));
+        assert!(!is_valid_comment("has\r\ncrlf"));
+        assert!(is_valid_comment("has\ttab"));
+        assert!(!is_valid_comment("\x00null"));
+    }
+
+    #[test]
+    fn test_normalize_hostname() {
+        assert_eq!(normalize_hostname("  LOCALHOST  "), "localhost");
+        assert_eq!(normalize_hostname("Example.COM"), "example.com");
+        assert_eq!(normalize_hostname(""), "");
+    }
 }

@@ -74,4 +74,95 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].hostnames[0], "real.local");
     }
+
+    #[test]
+    fn test_parse_empty() {
+        assert_eq!(parse("").len(), 0);
+        assert_eq!(parse("  \n  \n").len(), 0);
+    }
+
+    #[test]
+    fn test_parse_ipv6_full() {
+        let input = "fe80::1 localhost6\n2001:db8::1 example.com\n";
+        let result = parse(input);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].ip, "fe80::1");
+    }
+
+    #[test]
+    fn test_parse_tab_separated() {
+        let input = "127.0.0.1\tlocalhost\n";
+        let result = parse(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].hostnames, vec!["localhost"]);
+    }
+
+    #[test]
+    fn test_parse_disabled_entry() {
+        let input = "# 10.0.0.1 blocked.local\n";
+        let result = parse(input);
+        assert_eq!(result.len(), 1);
+        assert!(result[0].disabled);
+    }
+
+    #[test]
+    fn test_parse_disabled_with_comment() {
+        let input = "# 10.0.0.1 blocked.local # blocked reason\n";
+        let result = parse(input);
+        assert_eq!(result.len(), 1);
+        assert!(result[0].disabled);
+        assert_eq!(result[0].comment, Some("blocked reason".to_string()));
+    }
+
+    #[test]
+    fn test_parse_mixed_lines() {
+        // # comment is parsed as entry ip="#" host="comment" (parser ambiguity: # can be IP)
+        let input = "127.0.0.1 localhost\n# 10.0.0.1 blocked.local\n::1 localhost6\n";
+        let result = parse(input);
+        assert_eq!(result.len(), 3);
+        let disabled: Vec<_> = result.iter().filter(|e| e.disabled).collect();
+        let enabled: Vec<_> = result.iter().filter(|e| !e.disabled).collect();
+        assert_eq!(disabled.len(), 1);
+        assert_eq!(enabled.len(), 2);
+        assert_eq!(disabled[0].hostnames, vec!["blocked.local"]);
+    }
+
+    #[test]
+    fn test_parse_extra_spaces() {
+        let input = "  127.0.0.1     localhost   \n";
+        let result = parse(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].hostnames, vec!["localhost"]);
+    }
+
+    #[test]
+    fn test_parse_many_hostnames() {
+        let hosts: Vec<String> = (0..10).map(|i| format!("host{}.local", i)).collect();
+        let line = format!("10.0.0.1 {}\n", hosts.join(" "));
+        let result = parse(&line);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].hostnames, hosts);
+    }
+
+    #[test]
+    fn test_parse_comment_with_hash_in_content() {
+        let input = "10.0.0.1 example.com # version #2\n";
+        let result = parse(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].comment, Some("version #2".to_string()));
+    }
+
+    #[test]
+    fn test_parse_dos_newlines() {
+        let input = "127.0.0.1 localhost\r\n::1 localhost6\r\n";
+        let result = parse(input);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_no_trailing_newline() {
+        let input = "127.0.0.1 localhost";
+        let result = parse(input);
+        assert_eq!(result.len(), 1);
+    }
 }
