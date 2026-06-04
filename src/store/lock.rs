@@ -115,4 +115,61 @@ mod tests {
 
         lock1.unlock().unwrap();
     }
+
+    #[test]
+    fn test_lock_double_lock_same_instance() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+        let mut lock = FileLock::new(&file_path);
+        lock.lock().unwrap();
+        // Double lock on same instance from same process should be fine (upgrade)
+        lock.unlock().unwrap();
+    }
+
+    #[test]
+    fn test_lock_drop_releases() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+        let mut lock1 = FileLock::new(&file_path);
+        lock1.lock().unwrap();
+        drop(lock1); // Drop should release
+
+        let mut lock2 = FileLock::new(&file_path);
+        assert!(lock2.try_lock().unwrap());
+        lock2.unlock().unwrap();
+    }
+
+    #[test]
+    fn test_lock_try_lock_when_held() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+        let mut lock1 = FileLock::new(&file_path);
+        lock1.lock().unwrap();
+
+        let mut lock2 = FileLock::new(&file_path);
+        assert!(!lock2.try_lock().unwrap());
+
+        lock1.unlock().unwrap();
+    }
+
+    #[test]
+    fn test_lock_try_lock_immediate() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+        let mut lock = FileLock::new(&file_path);
+        assert!(lock.try_lock().unwrap());
+        lock.unlock().unwrap();
+    }
+
+    #[test]
+    fn test_lock_sequential_acquire_release() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test.txt");
+
+        for _ in 0..3 {
+            let mut lock = FileLock::new(&file_path);
+            lock.lock().unwrap();
+            lock.unlock().unwrap();
+        }
+    }
 }

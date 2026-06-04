@@ -483,4 +483,238 @@ mod tests {
         store.remove_by_ip("10.0.0.1").unwrap();
         assert_eq!(store.load().unwrap().len(), 1);
     }
+
+    #[test]
+    fn test_add_duplicate_hostname_on_other_ip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "").unwrap();
+        let store = Store::new(&path);
+
+        store
+            .add_entry("10.0.0.1", &["svc.local".into()], None)
+            .unwrap();
+        let dups = store
+            .add_entry("10.0.0.2", &["svc.local".into()], None)
+            .unwrap();
+        assert_eq!(dups, vec!["svc.local"]);
+    }
+
+    #[test]
+    fn test_add_duplicate_hostname_same_ip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "").unwrap();
+        let store = Store::new(&path);
+
+        store
+            .add_entry("10.0.0.1", &["svc.local".into()], None)
+            .unwrap();
+        let dups = store
+            .add_entry("10.0.0.1", &["svc.local".into()], None)
+            .unwrap();
+        assert!(dups.is_empty());
+        let entries = store.load().unwrap();
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn test_add_invalid_ip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "").unwrap();
+        let store = Store::new(&path);
+        // add_entry doesn't validate IP, but we test it stores as-is
+        store
+            .add_entry("not-an-ip", &["test.local".into()], None)
+            .unwrap();
+        let entries = store.load().unwrap();
+        assert_eq!(entries[0].ip, "not-an-ip");
+    }
+
+    #[test]
+    fn test_add_empty_hostnames() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "").unwrap();
+        let store = Store::new(&path);
+        let empty: Vec<String> = vec![];
+        store.add_entry("10.0.0.1", &empty, None).unwrap();
+        // Empty hostnames produce "10.0.0.1 \n" which cannot round-trip
+        // through the parser (regex requires at least one hostname after IP).
+        // The entry is created but lost after save/reload.
+        let entries = store.load().unwrap();
+        assert!(
+            entries.is_empty(),
+            "empty-hostname entry cannot survive save/reload"
+        );
+    }
+
+    #[test]
+    fn test_remove_non_existent_hostname() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local\n").unwrap();
+        let store = Store::new(&path);
+        let removed = store.remove_hostnames(&["none.local".into()]).unwrap();
+        assert_eq!(removed, 0);
+        assert_eq!(store.load().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_remove_by_non_existent_ip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local\n").unwrap();
+        let store = Store::new(&path);
+        let removed = store.remove_by_ip("10.0.0.99").unwrap();
+        assert_eq!(removed, 0);
+    }
+
+    #[test]
+    fn test_disable_then_remove() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local api.local\n").unwrap();
+        let store = Store::new(&path);
+
+        store.disable_hostname(&["api.local".into()]).unwrap();
+        let entries = store.load().unwrap();
+        // Should have 2 entries: enabled app.local, disabled api.local
+        let disabled: Vec<_> = entries.iter().filter(|e| e.disabled).collect();
+        assert_eq!(disabled.len(), 1);
+
+        store.remove_hostnames(&["api.local".into()]).unwrap();
+        let entries = store.load().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(!entries[0].disabled);
+        assert_eq!(entries[0].hostnames, vec!["app.local"]);
+    }
+
+    #[test]
+    fn test_enable_not_disabled() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local\n").unwrap();
+        let store = Store::new(&path);
+        let count = store.enable_hostname(&["app.local".into()]).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_disable_not_present() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local\n").unwrap();
+        let store = Store::new(&path);
+        let count = store.disable_hostname(&["none.local".into()]).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_toggle_non_existent() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local\n").unwrap();
+        let store = Store::new(&path);
+        let msg = store.toggle_hostname("none.local").unwrap();
+        assert!(msg.contains("enabled"), "should enable when not found");
+    }
+
+    #[test]
+    fn test_move_non_existent() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local\n").unwrap();
+        let store = Store::new(&path);
+        let moved = store.move_hostname("none.local", "10.0.0.99").unwrap();
+        assert_eq!(moved, 0);
+    }
+
+    #[test]
+    fn test_verify_empty_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "").unwrap();
+        let store = Store::new(&path);
+        let issues = store.verify().unwrap();
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn test_verify_missing_hostname() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "127.0.0.1\n").unwrap();
+        let store = Store::new(&path);
+        let issues = store.verify().unwrap();
+        assert_eq!(issues.len(), 1);
+        assert!(issues[0].3.contains("missing hostname"));
+    }
+
+    #[test]
+    fn test_load_non_existent_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("nonexistent");
+        let store = Store::new(&path);
+        let entries = store.load().unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_disable_by_then_enable_by_ip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local api.local\n").unwrap();
+        let store = Store::new(&path);
+
+        let n = store.disable_by_ip("10.0.0.1").unwrap();
+        assert_eq!(n, 1);
+
+        let entries = store.load().unwrap();
+        assert!(entries[0].disabled);
+
+        let n = store.enable_by_ip("10.0.0.1").unwrap();
+        assert_eq!(n, 1);
+
+        let entries = store.load().unwrap();
+        assert!(!entries[0].disabled);
+    }
+
+    #[test]
+    fn test_toggle_by_ip() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local\n").unwrap();
+        let store = Store::new(&path);
+
+        let msg = store.toggle_by_ip("10.0.0.1").unwrap();
+        assert!(msg.contains("disabled"));
+
+        let entries = store.load().unwrap();
+        assert!(entries[0].disabled);
+
+        let msg = store.toggle_by_ip("10.0.0.1").unwrap();
+        assert!(msg.contains("enabled"));
+    }
+
+    #[test]
+    fn test_serialize_remove_reload_cycle() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "").unwrap();
+        let store = Store::new(&path);
+
+        store
+            .add_entry("10.0.0.1", &["a.local".into(), "b.local".into()], None)
+            .unwrap();
+        store.disable_hostname(&["b.local".into()]).unwrap();
+        store.enable_hostname(&["b.local".into()]).unwrap();
+        store.remove_hostnames(&["a.local".into()]).unwrap();
+
+        let entries = store.load().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].hostnames, vec!["b.local"]);
+        assert!(!entries[0].disabled);
+    }
 }
