@@ -55,14 +55,19 @@ struct AppState {
 
 #[derive(Deserialize, ToSchema, utoipa::IntoParams)]
 struct ListQuery {
+    /// Filter by IP address (exact match)
+    ip: Option<String>,
+
+    /// Filter by hostname (exact match)
+    hostname: Option<String>,
+
     /// Filter pattern (supports * and ? wildcards)
     filter: Option<String>,
     /// Show only IPv4 entries
     ipv4: Option<bool>,
     /// Show only IPv6 entries
     ipv6: Option<bool>,
-    /// One row per hostname (default: compact by IP)
-    expand: Option<bool>,
+
     /// Case insensitive match
     ignore_case: Option<bool>,
 }
@@ -147,16 +152,32 @@ async fn list_entries(
     let re = q
         .filter
         .as_ref()
-        .map(|p| crate::cli::entry::build_regex(p, q.ignore_case.unwrap_or(false)));
+        .and_then(|p| crate::cli::entry::build_regex(p, q.ignore_case.unwrap_or(false)).ok());
 
     let mut rows = Vec::new();
     for entry in &entries {
-        if entry.hostnames.is_empty() {
+        if entry.disabled {
             continue;
+        }
+        if entry.canonical.is_empty() && entry.aliases.is_empty() {
+            continue;
+        }
+        if let Some(ref ip) = q.ip {
+            if entry.ip != *ip {
+                continue;
+            }
+        }
+        if let Some(ref hostname) = q.hostname {
+            let matched =
+                entry.canonical == *hostname || entry.aliases.iter().any(|a| a == hostname);
+            if !matched {
+                continue;
+            }
         }
         if let Some(ref re) = re {
             let ok = re.is_match(&entry.ip)
-                || entry.hostnames.iter().any(|h| re.is_match(h))
+                || entry.aliases.iter().any(|h| re.is_match(h))
+                || re.is_match(&entry.canonical)
                 || entry.comment.as_ref().is_some_and(|c| re.is_match(c));
             if !ok {
                 continue;
@@ -168,20 +189,21 @@ async fn list_entries(
         if q.ipv6.unwrap_or(false) && entry.ip.parse::<std::net::Ipv6Addr>().is_err() {
             continue;
         }
-        for host in &entry.hostnames {
-            rows.push(Row {
-                ip: entry.ip.clone(),
-                host: host.clone(),
-                comment: entry.comment.clone(),
-            });
-        }
+        let host_str = if entry.aliases.is_empty() {
+            entry.canonical.clone()
+        } else {
+            let mut parts = vec![entry.canonical.clone()];
+            parts.extend(entry.aliases.clone());
+            parts.join(" ")
+        };
+        rows.push(Row {
+            ip: entry.ip.clone(),
+            host: host_str,
+            comment: entry.comment.clone(),
+            canonical: Some(entry.canonical.clone()),
+            aliases: entry.aliases.clone(),
+        });
     }
-
-    let rows = if q.expand.unwrap_or(false) {
-        rows
-    } else {
-        crate::cli::compact_rows(&rows)
-    };
 
     (StatusCode::OK, Json(serde_json::json!(rows))).into_response()
 }
@@ -205,6 +227,28 @@ async fn add_entry(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AddBody>,
 ) -> impl IntoResponse {
+    // Validate inputs
+    if !crate::util::validation::is_valid_ip(&body.ip) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("invalid IP address: {}", body.ip)})),
+        )
+            .into_response();
+    }
+    for h in &body.hosts {
+        if !crate::util::validation::is_valid_hostname(h) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("invalid hostname: {}", h)})),
+            )
+                .into_response();
+        }
+    }
+    if let Some(ref c) = body.comment {
+        if !crate::util::validation::is_valid_comment(c) {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "invalid comment: contains control characters or newlines"}))).into_response();
+        }
+    }
     let store = Store::new(&state.hosts_file);
     match store.add_entry(&body.ip, &body.hosts, body.comment.as_deref()) {
         Ok(duplicates) => {
@@ -245,6 +289,13 @@ async fn remove_hostname(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(hostname): axum::extract::Path<String>,
 ) -> impl IntoResponse {
+    if !crate::util::validation::is_valid_hostname(&hostname) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("invalid hostname: {}", hostname)})),
+        )
+            .into_response();
+    }
     let store = Store::new(&state.hosts_file);
     match store.remove_hostnames(std::slice::from_ref(&hostname)) {
         Ok(count) => (
@@ -326,6 +377,20 @@ async fn edit_entry(
     axum::extract::Path(hostname): axum::extract::Path<String>,
     Json(body): Json<EditBody>,
 ) -> impl IntoResponse {
+    if !crate::util::validation::is_valid_hostname(&hostname) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("invalid hostname: {}", hostname)})),
+        )
+            .into_response();
+    }
+    if !crate::util::validation::is_valid_ip(&body.ip) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("invalid IP address: {}", body.ip)})),
+        )
+            .into_response();
+    }
     let store = Store::new(&state.hosts_file);
     match store.move_hostname(&hostname, &body.ip) {
         Ok(0) => (
@@ -368,6 +433,13 @@ async fn disable_entry(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(hostname): axum::extract::Path<String>,
 ) -> impl IntoResponse {
+    if !crate::util::validation::is_valid_hostname(&hostname) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("invalid hostname: {}", hostname)})),
+        )
+            .into_response();
+    }
     let store = Store::new(&state.hosts_file);
     match store.disable_hostname(std::slice::from_ref(&hostname)) {
         Ok(n) if n > 0 => (
@@ -410,6 +482,13 @@ async fn enable_entry(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(hostname): axum::extract::Path<String>,
 ) -> impl IntoResponse {
+    if !crate::util::validation::is_valid_hostname(&hostname) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("invalid hostname: {}", hostname)})),
+        )
+            .into_response();
+    }
     let store = Store::new(&state.hosts_file);
     match store.enable_hostname(std::slice::from_ref(&hostname)) {
         Ok(n) if n > 0 => (
@@ -451,6 +530,13 @@ async fn toggle_entry(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(hostname): axum::extract::Path<String>,
 ) -> impl IntoResponse {
+    if !crate::util::validation::is_valid_hostname(&hostname) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("invalid hostname: {}", hostname)})),
+        )
+            .into_response();
+    }
     let store = Store::new(&state.hosts_file);
     match store.toggle_hostname(&hostname) {
         Ok(msg) => (StatusCode::OK, Json(MessageResponse { message: msg })).into_response(),
@@ -464,11 +550,11 @@ async fn toggle_entry(
 
 // ── Public entrypoint ─────────────────────────────────────
 
-pub fn handle(cli: &crate::cli::Cli, port: u16) {
+pub fn handle(cli: &crate::cli::Cli, port: u16, bind: &str, no_docs: bool) {
     let hosts_file = cli.hosts_file.clone();
     let state = Arc::new(AppState { hosts_file });
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/api/entries", get(list_entries).post(add_entry))
         .route(
             "/api/entries/{hostname}",
@@ -478,11 +564,24 @@ pub fn handle(cli: &crate::cli::Cli, port: u16) {
         .route("/api/entries/{hostname}/enable", put(enable_entry))
         .route("/api/entries/{hostname}/toggle", put(toggle_entry))
         .route("/api/entries", delete(remove_by_ip))
-        .merge(SwaggerUi::new("/docs").url("/api/openapi.json", ApiDoc::openapi()))
-        .layer(tower_http::cors::CorsLayer::permissive())
+        // Limit concurrent requests to 32 workers
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(65536 * 1024))
+        // Limit concurrent requests to 32 workers
+        .layer(tower::limit::ConcurrencyLimitLayer::new(32))
+        .layer(tower_http::cors::CorsLayer::new())
         .with_state(state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    if !no_docs {
+        app = app.merge(SwaggerUi::new("/docs").url("/api/openapi.json", ApiDoc::openapi()));
+    }
+
+    let addr: SocketAddr = match format!("{}:{}", bind, port).parse() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("Error: invalid bind address '{}': {}", bind, e);
+            std::process::exit(1);
+        }
+    };
     if !cli.quiet {
         eprintln!("Serving hosts API on http://{}", addr);
         eprintln!("API docs at http://{}/docs", addr);
@@ -490,7 +589,12 @@ pub fn handle(cli: &crate::cli::Cli, port: u16) {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("Error: failed to bind to {}: {}", addr, e);
+                std::process::exit(1);
+            });
         if let Err(e) = axum::serve(listener, app).await {
             eprintln!("Server error: {}", e);
             std::process::exit(1);

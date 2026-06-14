@@ -102,7 +102,7 @@ fn resolve_local(cli: &Cli, hosts: &[String]) {
             // IP → find hostnames pointing to this IP
             for entry in &entries {
                 if entry.ip == host_stripped && !entry.disabled {
-                    for h in &entry.hostnames {
+                    for h in std::iter::once(&entry.canonical).chain(&entry.aliases) {
                         rows.push(ResolveRow {
                             name: h.clone(),
                             addr: entry.ip.clone(),
@@ -113,7 +113,10 @@ fn resolve_local(cli: &Cli, hosts: &[String]) {
         } else {
             // hostname → find IPs
             for entry in &entries {
-                if entry.hostnames.contains(&host_stripped.to_string()) && !entry.disabled {
+                if (entry.canonical == host_stripped
+                    || entry.aliases.contains(&host_stripped.to_string()))
+                    && !entry.disabled
+                {
                     rows.push(ResolveRow {
                         name: host.to_string(),
                         addr: entry.ip.clone(),
