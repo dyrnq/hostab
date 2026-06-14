@@ -206,7 +206,7 @@ pub fn handle_edit(cli: &Cli, host: &str, ip: &str) {
 }
 
 /// Build regex from pattern. `*`/`?` → glob, else literal substring.
-fn build_regex(pattern: &str, ignore_case: bool) -> regex::Regex {
+pub(crate) fn build_regex(pattern: &str, ignore_case: bool) -> regex::Regex {
     let has_wildcards = pattern.contains('*') || pattern.contains('?');
     let re_str = if has_wildcards {
         glob_to_regex(pattern)
