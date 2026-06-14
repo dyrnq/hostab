@@ -108,7 +108,7 @@ jobs:
         shell: bash
         env:
           HOSTAB_BIN: target/${{ matrix.target }}/release/${{ steps.binary.outputs.name }}
-        run: cargo test --test integration_test --release
+        run: cargo test --test integration_test --release -- --test-threads=1
 
       - name: Build (cross)
         if: matrix.cross

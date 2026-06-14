@@ -3,3 +3,4 @@
 .qwen
 qw.sh
 tests/*.bak
+*.bak.*
