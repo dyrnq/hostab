@@ -89,7 +89,15 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Run unit tests
-        run: cargo test --release
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            HOSTAB_BIN="target/${{ matrix.target }}/release/hostab.exe"
+          else
+            HOSTAB_BIN="target/${{ matrix.target }}/release/hostab"
+          fi
+          export HOSTAB_BIN
+          cargo test --release --lib --bins
 
       - name: Run integration tests
         shell: bash
