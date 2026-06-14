@@ -36,22 +36,25 @@ fn main() {
             EntryCommands::List {
                 ipv4,
                 ipv6,
-                expand,
                 pattern,
                 ignore_case,
             } => {
-                cli::entry::handle_list(
-                    &cli,
-                    *ipv4,
-                    *ipv6,
-                    *expand,
-                    pattern.as_deref(),
-                    *ignore_case,
-                );
+                cli::entry::handle_list(&cli, *ipv4, *ipv6, pattern.as_deref(), *ignore_case);
             }
-            EntryCommands::Add { ip, hosts, comment } => {
-                cli::entry::handle_add(&cli, ip, hosts, comment.as_deref())
-            }
+            EntryCommands::Add {
+                ip,
+                hosts,
+                canonical,
+                alias,
+                comment,
+            } => cli::entry::handle_add(
+                &cli,
+                ip,
+                hosts,
+                canonical.as_deref(),
+                alias,
+                comment.as_deref(),
+            ),
             EntryCommands::Rm { hosts, ip } => cli::entry::handle_rm(&cli, hosts, ip.as_deref()),
             EntryCommands::Disable { hosts, ip } => {
                 cli::entry::handle_disable(&cli, hosts, ip.as_deref())
@@ -64,19 +67,29 @@ fn main() {
             }
             EntryCommands::Edit { host, ip } => cli::entry::handle_edit(&cli, host, ip),
         },
-        Commands::Serve { port } => cli::serve::handle(&cli, *port),
+        Commands::Serve {
+            port,
+            bind,
+            no_docs,
+        } => cli::serve::handle(&cli, *port, bind, *no_docs),
         Commands::Verify { strict } => cli::verify::handle_verify(&cli, *strict),
         Commands::Merge { src, target } => {
             cli::merge::handle(&cli, src, target.as_ref());
         }
         Commands::Resolve { hosts, local } => cli::resolve::handle(&cli, hosts, *local),
-        Commands::Cat => match std::fs::read_to_string(&cli.hosts_file) {
-            Ok(c) => print!("{}", c),
-            Err(e) => {
+        Commands::Cat => {
+            if let Err(e) = util::validation::validate_secure_path(&cli.hosts_file) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
-        },
+            match std::fs::read_to_string(&cli.hosts_file) {
+                Ok(c) => print!("{}", c),
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
         Commands::Completion { shell } => {
             use clap::CommandFactory;
             use clap_complete::{generate, shells};

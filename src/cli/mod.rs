@@ -5,7 +5,6 @@ pub mod serve;
 pub mod verify;
 
 use crate::core::model::Row;
-use std::collections::HashMap;
 
 use clap::{Parser, Subcommand, ValueHint};
 use std::path::PathBuf;
@@ -83,6 +82,14 @@ pub enum Commands {
         /// Port to listen on
         #[arg(short, long, default_value = "3456")]
         port: u16,
+
+        /// Bind address (default: 127.0.0.1)
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+
+        /// Disable Swagger UI docs at /docs
+        #[arg(long)]
+        no_docs: bool,
     },
 }
 
@@ -100,10 +107,6 @@ pub enum EntryCommands {
         #[arg(long, conflicts_with = "ipv4")]
         ipv6: bool,
 
-        /// One row per hostname (default: compact by IP)
-        #[arg(long)]
-        expand: bool,
-
         /// Filter entries matching pattern (supports * and ? wildcards)
         #[arg(short = 'f', long = "filter")]
         pattern: Option<String>,
@@ -118,8 +121,16 @@ pub enum EntryCommands {
         /// IP address
         ip: String,
 
-        /// Hostnames
+        /// Hostnames (first is canonical, the rest are aliases)
         hosts: Vec<String>,
+
+        /// Explicit canonical hostname
+        #[arg(long)]
+        canonical: Option<String>,
+
+        /// Alias hostnames (repeatable)
+        #[arg(long)]
+        alias: Vec<String>,
 
         /// Optional comment
         #[arg(long)]
@@ -180,40 +191,6 @@ pub enum EntryCommands {
 // ── Shared output utilities ─────────────────────────────────────
 
 /// Merge rows with the same IP into one row, joining hostnames with spaces.
-pub fn compact_rows(rows: &[Row]) -> Vec<Row> {
-    let mut map: HashMap<String, (Vec<String>, Vec<String>)> = HashMap::new();
-    let mut order: Vec<String> = Vec::new();
-
-    for row in rows {
-        let key = row.ip.clone();
-        let (hosts, comments) = map.entry(key.clone()).or_insert_with(|| {
-            order.push(key.clone());
-            (Vec::new(), Vec::new())
-        });
-        hosts.push(row.host.clone());
-        if let Some(ref c) = row.comment {
-            if !c.is_empty() && !comments.contains(c) {
-                comments.push(c.clone());
-            }
-        }
-    }
-
-    order
-        .into_iter()
-        .filter_map(|ip| {
-            map.remove(&ip).map(|(hosts, comments)| Row {
-                ip,
-                host: hosts.join(" "),
-                comment: if comments.is_empty() {
-                    None
-                } else {
-                    Some(comments.join("; "))
-                },
-            })
-        })
-        .collect()
-}
-
 /// Print rows in the requested output format
 pub fn print_output(cli: &Cli, rows: &[Row]) {
     if cli.quiet {
