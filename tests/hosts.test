@@ -1,6 +1,6 @@
-127.0.0.1      localhost
-::1            localhost
-127.0.1.1      myhost.local
-10.0.0.1       app.local api.local
-10.0.0.2       db.local # database server
-192.168.1.100  prod.local cdn.prod.local
+127.0.0.1 localhost
+::1 localhost
+127.0.1.1 myhost.local
+10.0.0.1 app.local api.local
+10.0.0.2 db.local # database server
+192.168.1.100 prod.local cdn.prod.local
