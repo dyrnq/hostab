@@ -11,7 +11,7 @@ pub struct Entry {
 }
 
 /// A row for display/rendering
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
 pub struct Row {
     pub ip: String,
     pub host: String,
