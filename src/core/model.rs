@@ -3,7 +3,8 @@
 pub struct Entry {
     pub id: usize,
     pub ip: String,
-    pub hostnames: Vec<String>,
+    pub canonical: String,
+    pub aliases: Vec<String>,
     pub comment: Option<String>,
     pub disabled: bool,
     #[serde(skip)]
@@ -16,6 +17,11 @@ pub struct Row {
     pub ip: String,
     pub host: String,
     pub comment: Option<String>,
+    /// The canonical hostname for this IP
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical: Option<String>,
+    /// Alias hostnames (empty if none)
+    pub aliases: Vec<String>,
 }
 
 /// Search match info

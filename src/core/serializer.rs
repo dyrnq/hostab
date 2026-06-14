@@ -8,7 +8,11 @@ pub fn serialize(entries: &[Entry]) -> String {
         }
         output.push_str(&entry.ip);
         output.push(' ');
-        output.push_str(&entry.hostnames.join(" "));
+        output.push_str(&entry.canonical);
+        if !entry.aliases.is_empty() {
+            output.push(' ');
+            output.push_str(&entry.aliases.join(" "));
+        }
         if let Some(ref c) = entry.comment {
             if !c.is_empty() {
                 output.push_str(" # ");
@@ -44,7 +48,8 @@ mod tests {
         let entries = vec![Entry {
             id: 1,
             ip: "10.0.0.1".into(),
-            hostnames: vec!["blocked.local".into()],
+            canonical: "blocked.local".into(),
+            aliases: vec![],
             comment: None,
             disabled: true,
             raw: None,
@@ -57,7 +62,8 @@ mod tests {
         let entries = vec![Entry {
             id: 1,
             ip: "10.0.0.1".into(),
-            hostnames: vec!["app.local".into()],
+            canonical: "app.local".into(),
+            aliases: vec![],
             comment: Some("dev server".into()),
             disabled: false,
             raw: None,
@@ -70,7 +76,8 @@ mod tests {
         let entries = vec![Entry {
             id: 1,
             ip: "10.0.0.1".into(),
-            hostnames: vec!["app.local".into()],
+            canonical: "app.local".into(),
+            aliases: vec![],
             comment: Some("".into()),
             disabled: false,
             raw: None,
@@ -84,7 +91,8 @@ mod tests {
             Entry {
                 id: 1,
                 ip: "10.0.0.1".into(),
-                hostnames: vec!["enabled.local".into()],
+                canonical: "enabled.local".into(),
+                aliases: vec![],
                 comment: None,
                 disabled: false,
                 raw: None,
@@ -92,7 +100,8 @@ mod tests {
             Entry {
                 id: 2,
                 ip: "10.0.0.2".into(),
-                hostnames: vec!["disabled.local".into()],
+                canonical: "disabled.local".into(),
+                aliases: vec![],
                 comment: None,
                 disabled: true,
                 raw: None,
@@ -127,4 +136,35 @@ mod tests {
         assert!(reparsed[1].disabled);
         assert_eq!(reparsed[1].comment, Some("reason".to_string()));
     }
+}
+
+#[test]
+fn test_serialize_canonical_first() {
+    let entries = vec![Entry {
+        id: 1,
+        ip: "10.0.0.1".into(),
+        canonical: "canon.local".into(),
+        aliases: vec!["alias1.local".into(), "alias2.local".into()],
+        comment: None,
+        disabled: false,
+        raw: None,
+    }];
+    assert_eq!(
+        serialize(&entries),
+        "10.0.0.1 canon.local alias1.local alias2.local\n"
+    );
+}
+
+#[test]
+fn test_serialize_canonical_no_alias() {
+    let entries = vec![Entry {
+        id: 1,
+        ip: "10.0.0.1".into(),
+        canonical: "only.local".into(),
+        aliases: vec![],
+        comment: None,
+        disabled: false,
+        raw: None,
+    }];
+    assert_eq!(serialize(&entries), "10.0.0.1 only.local\n");
 }

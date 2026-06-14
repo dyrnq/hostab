@@ -27,17 +27,24 @@ pub fn parse(content: &str) -> Vec<Entry> {
             }
 
             let hosts_str = caps.name("hosts").unwrap().as_str();
-            let hostnames: Vec<String> = hosts_str
+            let all_hosts: Vec<String> = hosts_str
                 .split_whitespace()
                 .map(|h| h.to_string())
                 .collect();
             let comment = caps.name("comment").map(|m| m.as_str().to_string());
 
+            let (canonical, aliases) = if let Some((first, rest)) = all_hosts.split_first() {
+                (first.clone(), rest.to_vec())
+            } else {
+                continue;
+            };
+
             entry_id += 1;
             entries.push(Entry {
                 id: entry_id,
                 ip,
-                hostnames,
+                canonical,
+                aliases,
                 comment,
                 disabled: is_disabled,
                 raw: Some(line.to_string()),
@@ -72,7 +79,7 @@ mod tests {
         let input = "# this is a comment\n127.0.0.1 real.local\n";
         let result = parse(input);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].hostnames[0], "real.local");
+        assert_eq!(result[0].canonical, "real.local");
     }
 
     #[test]
@@ -94,7 +101,7 @@ mod tests {
         let input = "127.0.0.1\tlocalhost\n";
         let result = parse(input);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].hostnames, vec!["localhost"]);
+        assert_eq!(result[0].canonical, "localhost");
     }
 
     #[test]
@@ -124,7 +131,7 @@ mod tests {
         let enabled: Vec<_> = result.iter().filter(|e| !e.disabled).collect();
         assert_eq!(disabled.len(), 1);
         assert_eq!(enabled.len(), 2);
-        assert_eq!(disabled[0].hostnames, vec!["blocked.local"]);
+        assert_eq!(disabled[0].canonical, "blocked.local");
     }
 
     #[test]
@@ -132,7 +139,7 @@ mod tests {
         let input = "  127.0.0.1     localhost   \n";
         let result = parse(input);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].hostnames, vec!["localhost"]);
+        assert_eq!(result[0].canonical, "localhost");
     }
 
     #[test]
@@ -141,7 +148,8 @@ mod tests {
         let line = format!("10.0.0.1 {}\n", hosts.join(" "));
         let result = parse(&line);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].hostnames, hosts);
+        assert_eq!(result[0].canonical, hosts[0].clone());
+        assert_eq!(result[0].aliases, hosts[1..].to_vec());
     }
 
     #[test]
@@ -165,4 +173,35 @@ mod tests {
         let result = parse(input);
         assert_eq!(result.len(), 1);
     }
+}
+
+#[test]
+fn test_parse_canonical_split() {
+    let input = "10.0.0.1 app.local api.local web.local
+";
+    let result = parse(input);
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].canonical, "app.local");
+    assert_eq!(result[0].aliases, vec!["api.local", "web.local"]);
+}
+
+#[test]
+fn test_parse_single_no_alias() {
+    let input = "10.0.0.1 app.local
+";
+    let result = parse(input);
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].canonical, "app.local");
+    assert!(result[0].aliases.is_empty());
+}
+
+#[test]
+fn test_parse_canonical_disabled() {
+    let input = "# 10.0.0.1 blocked.local alt.local
+";
+    let result = parse(input);
+    assert_eq!(result.len(), 1);
+    assert!(result[0].disabled);
+    assert_eq!(result[0].canonical, "blocked.local");
+    assert_eq!(result[0].aliases, vec!["alt.local"]);
 }
