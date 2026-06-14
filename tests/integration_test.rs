@@ -458,7 +458,7 @@ fn start_server(hosts_content: &str, port: u16) -> (tempfile::TempDir, std::proc
     std::fs::write(&path, hosts_content).unwrap();
 
     let child = std::process::Command::new(hostab_bin())
-        .args(&[
+        .args([
             "--hosts-file",
             path.to_str().unwrap(),
             "serve",
