@@ -1,14 +1,7 @@
 use crate::cli::{print_output, Cli};
 use crate::store::file::Store;
 
-pub fn handle_list(
-    cli: &Cli,
-    ipv4: bool,
-    ipv6: bool,
-    expand: bool,
-    pattern: Option<&str>,
-    ignore_case: bool,
-) {
+pub fn handle_list(cli: &Cli, ipv4: bool, ipv6: bool, pattern: Option<&str>, ignore_case: bool) {
     let store = Store::new(&cli.hosts_file);
     let entries = match store.load() {
         Ok(e) => e,
@@ -18,16 +11,26 @@ pub fn handle_list(
         }
     };
 
-    let re = pattern.map(|p| build_regex(p, ignore_case));
+    let re = pattern.and_then(|p| match build_regex(p, ignore_case) {
+        Ok(r) => Some(r),
+        Err(e) => {
+            eprintln!("Warning: invalid filter pattern: {}", e);
+            None
+        }
+    });
 
     let mut rows = Vec::new();
     for entry in &entries {
-        if entry.hostnames.is_empty() {
+        if entry.disabled {
+            continue;
+        }
+        if entry.canonical.is_empty() && entry.aliases.is_empty() {
             continue;
         }
         if let Some(ref re) = re {
             let ok = re.is_match(&entry.ip)
-                || entry.hostnames.iter().any(|h| re.is_match(h))
+                || entry.aliases.iter().any(|h| re.is_match(h))
+                || re.is_match(&entry.canonical)
                 || entry.comment.as_ref().is_some_and(|c| re.is_match(c));
             if !ok {
                 continue;
@@ -39,28 +42,52 @@ pub fn handle_list(
         if ipv6 && entry.ip.parse::<std::net::Ipv6Addr>().is_err() {
             continue;
         }
-        for host in &entry.hostnames {
-            rows.push(crate::core::model::Row {
-                ip: entry.ip.clone(),
-                host: host.clone(),
-                comment: entry.comment.clone(),
-            });
-        }
+        let host_str = if entry.aliases.is_empty() {
+            entry.canonical.clone()
+        } else {
+            let mut parts = vec![entry.canonical.clone()];
+            parts.extend(entry.aliases.clone());
+            parts.join(" ")
+        };
+        rows.push(crate::core::model::Row {
+            ip: entry.ip.clone(),
+            host: host_str,
+            comment: entry.comment.clone(),
+            canonical: Some(entry.canonical.clone()),
+            aliases: entry.aliases.clone(),
+        });
     }
-    let rows = if expand {
-        rows
-    } else {
-        super::compact_rows(&rows)
-    };
     print_output(cli, &rows);
 }
 
-pub fn handle_add(cli: &Cli, ip: &str, hosts: &[String], comment: Option<&str>) {
+pub fn handle_add(
+    cli: &Cli,
+    ip: &str,
+    hosts: &[String],
+    canonical: Option<&str>,
+    aliases: &[String],
+    comment: Option<&str>,
+) {
+    let canon: Vec<String> = if let Some(c) = canonical {
+        // Explicit canonical, hosts are extra positionals
+        let mut all = vec![c.to_string()];
+        all.extend(hosts.iter().cloned());
+        all.extend(aliases.iter().cloned());
+        all
+    } else if !hosts.is_empty() {
+        // Positional: first is canonical, rest are aliases
+        let mut all = hosts.to_vec();
+        all.extend(aliases.iter().cloned());
+        all
+    } else {
+        aliases.to_vec()
+    };
+
     let store = Store::new(&cli.hosts_file);
-    match store.add_entry(ip, hosts, comment) {
+    match store.add_entry(ip, &canon, comment) {
         Ok(duplicates) => {
             if !cli.quiet {
-                println!("Added {} {}", ip, hosts.join(" "));
+                println!("Added {} {}", ip, canon.join(" "));
             }
             for d in &duplicates {
                 eprintln!("Warning: '{}' already exists on another IP", d);
@@ -206,7 +233,14 @@ pub fn handle_edit(cli: &Cli, host: &str, ip: &str) {
 }
 
 /// Build regex from pattern. `*`/`?` → glob, else literal substring.
-pub(crate) fn build_regex(pattern: &str, ignore_case: bool) -> regex::Regex {
+pub(crate) fn build_regex(pattern: &str, ignore_case: bool) -> Result<regex::Regex, String> {
+    if pattern.is_empty() {
+        return Err("empty pattern".into());
+    }
+    // Limit pattern length to prevent resource exhaustion
+    if pattern.len() > 1024 {
+        return Err("pattern exceeds maximum length of 1024 characters".into());
+    }
     let has_wildcards = pattern.contains('*') || pattern.contains('?');
     let re_str = if has_wildcards {
         glob_to_regex(pattern)
@@ -217,7 +251,8 @@ pub(crate) fn build_regex(pattern: &str, ignore_case: bool) -> regex::Regex {
     if ignore_case {
         b.case_insensitive(true);
     }
-    b.build().unwrap()
+    b.build()
+        .map_err(|e| format!("invalid regex pattern: {}", e))
 }
 
 fn glob_to_regex(pattern: &str) -> String {
