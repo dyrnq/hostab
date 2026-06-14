@@ -35,6 +35,7 @@ impl Store {
         if !self.path.exists() {
             return Ok(Vec::new());
         }
+        validation::validate_secure_path(&self.path)?;
         let content = fs::read_to_string(&self.path)?;
         Ok(parser::parse(&content))
     }
@@ -46,14 +47,18 @@ impl Store {
             fs::create_dir_all(parent)?;
         }
         let content = serializer::serialize(entries);
-        let tmp = self.path.with_extension("tmp");
-        {
-            let mut f = fs::File::create(&tmp)?;
-            f.write_all(content.as_bytes())?;
-            f.flush()?;
-            f.sync_all()?;
-        }
-        fs::rename(&tmp, &self.path)?;
+        // Use temporary file in the same directory with a random suffix to avoid TOCTOU
+        let dir = self
+            .path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let mut tmp = tempfile::NamedTempFile::new_in(dir)
+            .map_err(|e| io::Error::other(format!("failed to create temp file: {}", e)))?;
+        tmp.write_all(content.as_bytes())?;
+        tmp.flush()?;
+        tmp.as_file().sync_all()?;
+        tmp.persist(&self.path)
+            .map_err(|e| io::Error::other(format!("failed to persist temp file: {}", e)))?;
         Ok(())
     }
 
@@ -71,16 +76,17 @@ impl Store {
         let entries = self.load()?;
         let mut rows = Vec::new();
         for entry in &entries {
-            if entry.hostnames.is_empty() {
+            if entry.canonical.is_empty() && entry.aliases.is_empty() {
                 continue;
             }
-            for host in &entry.hostnames {
-                rows.push(Row {
-                    ip: entry.ip.clone(),
-                    host: host.clone(),
-                    comment: entry.comment.clone(),
-                });
-            }
+            // canonical first, then aliases
+            rows.push(Row {
+                ip: entry.ip.clone(),
+                host: entry.canonical.clone(),
+                comment: entry.comment.clone(),
+                canonical: Some(entry.canonical.clone()),
+                aliases: entry.aliases.clone(),
+            });
         }
         Ok(rows)
     }
@@ -99,18 +105,26 @@ impl Store {
         for entry in &entries {
             if entry.ip != ip {
                 for h in hosts {
-                    if entry.hostnames.contains(h) && !duplicates.contains(h) {
+                    if (entry.canonical == *h || entry.aliases.contains(h))
+                        && !duplicates.contains(h)
+                    {
                         duplicates.push(h.clone());
                     }
                 }
             }
         }
 
-        // Merge into existing entry with same IP
-        if let Some(existing) = entries.iter_mut().find(|e| e.ip == ip) {
+        // If the canonical hostname differs from existing entry, create a new line
+        let canonical_host = hosts.first().map(|s| s.as_str()).unwrap_or("");
+        let existing = entries
+            .iter()
+            .position(|e| e.ip == ip && e.canonical == canonical_host);
+
+        if let Some(idx) = existing {
+            let existing = &mut entries[idx];
             for h in hosts {
-                if !existing.hostnames.contains(h) {
-                    existing.hostnames.push(h.clone());
+                if existing.canonical != *h && !existing.aliases.contains(h) {
+                    existing.aliases.push(h.clone());
                 }
             }
             if let Some(c) = comment {
@@ -121,7 +135,8 @@ impl Store {
             entries.push(Entry {
                 id: next_id,
                 ip: ip.to_string(),
-                hostnames: hosts.to_vec(),
+                canonical: hosts.first().cloned().unwrap_or_default(),
+                aliases: hosts.get(1..).map(|s| s.to_vec()).unwrap_or_default(),
                 comment: comment.map(|c| c.to_string()),
                 disabled: false,
                 raw: None,
@@ -138,11 +153,25 @@ impl Store {
         let mut removed = 0;
 
         for entry in &mut entries {
-            let before = entry.hostnames.len();
-            entry.hostnames.retain(|h| !hostnames.contains(h));
-            removed += before - entry.hostnames.len();
+            let host_count_before =
+                (if entry.canonical.is_empty() { 0 } else { 1 }) + entry.aliases.len();
+
+            // If canonical matches, promote first alias
+            if !entry.canonical.is_empty() && hostnames.contains(&entry.canonical) {
+                if !entry.aliases.is_empty() {
+                    entry.canonical = entry.aliases.remove(0);
+                } else {
+                    entry.canonical.clear();
+                }
+            }
+            // Remove from aliases
+            entry.aliases.retain(|h| !hostnames.contains(h));
+
+            let host_count_after =
+                (if entry.canonical.is_empty() { 0 } else { 1 }) + entry.aliases.len();
+            removed += host_count_before - host_count_after;
         }
-        entries.retain(|e| !e.hostnames.is_empty());
+        entries.retain(|e| !e.canonical.is_empty() || !e.aliases.is_empty());
 
         self.safe_save(&entries)?;
         Ok(removed)
@@ -167,7 +196,19 @@ impl Store {
 
         for entry in &mut entries {
             let mut split: Vec<String> = Vec::new();
-            entry.hostnames.retain(|h| {
+
+            // Check canonical
+            if hostnames.contains(&entry.canonical) {
+                split.push(entry.canonical.clone());
+                if !entry.aliases.is_empty() {
+                    entry.canonical = entry.aliases.remove(0);
+                } else {
+                    entry.canonical.clear();
+                }
+            }
+
+            // Check aliases
+            entry.aliases.retain(|h| {
                 if hostnames.contains(h) {
                     split.push(h.clone());
                     false
@@ -175,13 +216,15 @@ impl Store {
                     true
                 }
             });
+
             if !split.is_empty() {
                 for h in &split {
                     next_id += 1;
                     new_entries.push(Entry {
                         id: next_id,
                         ip: entry.ip.clone(),
-                        hostnames: vec![h.clone()],
+                        canonical: h.clone(),
+                        aliases: vec![],
                         comment: entry.comment.clone(),
                         disabled: true,
                         raw: None,
@@ -190,7 +233,7 @@ impl Store {
                 }
             }
         }
-        entries.retain(|e| !e.hostnames.is_empty());
+        entries.retain(|e| !e.canonical.is_empty() || !e.aliases.is_empty());
         entries.append(&mut new_entries);
         self.safe_save(&entries)?;
         Ok(count)
@@ -200,36 +243,51 @@ impl Store {
     pub fn enable_hostname(&self, hostnames: &[String]) -> io::Result<usize> {
         let mut entries = self.load()?;
         let mut count = 0;
-        let mut merge: std::collections::HashMap<String, Vec<String>> =
-            std::collections::HashMap::new();
+        let mut merge: Vec<(String, String)> = Vec::new(); // (ip, hostname)
         let mut kept_disabled: Vec<Entry> = Vec::new();
 
         entries.retain(|e| {
-            if e.disabled && e.hostnames.iter().any(|h| hostnames.contains(h)) {
-                for h in &e.hostnames {
+            if e.disabled {
+                let mut matched = false;
+                let mut to_merge: Vec<String> = Vec::new();
+                let mut remaining: Vec<String> = Vec::new();
+
+                if hostnames.contains(&e.canonical) {
+                    matched = true;
+                    to_merge.push(e.canonical.clone());
+                } else if !e.canonical.is_empty() {
+                    remaining.push(e.canonical.clone());
+                }
+
+                for h in &e.aliases {
                     if hostnames.contains(h) {
-                        merge.entry(e.ip.clone()).or_default().push(h.clone());
-                        count += 1;
+                        matched = true;
+                        to_merge.push(h.clone());
+                    } else {
+                        remaining.push(h.clone());
                     }
                 }
-                // Keep non-matching hostnames as a separate disabled entry
-                let remaining: Vec<String> = e
-                    .hostnames
-                    .iter()
-                    .filter(|h| !hostnames.contains(*h))
-                    .cloned()
-                    .collect();
-                if !remaining.is_empty() {
-                    kept_disabled.push(Entry {
-                        id: 0,
-                        ip: e.ip.clone(),
-                        hostnames: remaining,
-                        comment: e.comment.clone(),
-                        disabled: true,
-                        raw: None,
-                    });
+
+                if matched {
+                    for h in to_merge {
+                        merge.push((e.ip.clone(), h));
+                        count += 1;
+                    }
+                    if !remaining.is_empty() {
+                        kept_disabled.push(Entry {
+                            id: 0,
+                            ip: e.ip.clone(),
+                            canonical: remaining.remove(0),
+                            aliases: remaining,
+                            comment: e.comment.clone(),
+                            disabled: true,
+                            raw: None,
+                        });
+                    }
+                    false
+                } else {
+                    true
                 }
-                false
             } else {
                 true
             }
@@ -240,19 +298,18 @@ impl Store {
         }
         entries.append(&mut kept_disabled);
 
-        for (ip, hosts) in &merge {
+        for (ip, hostname) in &merge {
             if let Some(existing) = entries.iter_mut().find(|e| e.ip == *ip && !e.disabled) {
-                for h in hosts {
-                    if !existing.hostnames.contains(h) {
-                        existing.hostnames.push(h.clone());
-                    }
+                if existing.canonical != *hostname && !existing.aliases.contains(hostname) {
+                    existing.aliases.push(hostname.clone());
                 }
             } else {
                 let id = entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
                 entries.push(Entry {
                     id,
                     ip: ip.clone(),
-                    hostnames: hosts.clone(),
+                    canonical: hostname.clone(),
+                    aliases: vec![],
                     comment: None,
                     disabled: false,
                     raw: None,
@@ -267,9 +324,9 @@ impl Store {
     /// Toggle a hostname: if any entry with it is enabled → disable; else → enable.
     pub fn toggle_hostname(&self, hostname: &str) -> io::Result<String> {
         let entries = self.load()?;
-        let any_enabled = entries
-            .iter()
-            .any(|e| !e.disabled && e.hostnames.contains(&hostname.to_string()));
+        let any_enabled = entries.iter().any(|e| {
+            !e.disabled && (e.canonical == *hostname || e.aliases.contains(&hostname.to_string()))
+        });
         if any_enabled {
             self.disable_hostname(&[hostname.to_string()])?;
             Ok(format!("disabled {}", hostname))
@@ -332,13 +389,24 @@ impl Store {
 
         // Remove from old entries
         for entry in &mut entries {
-            if entry.hostnames.contains(&hostname.to_string()) {
-                entry.hostnames.retain(|h| h != hostname);
+            let in_canonical = entry.canonical == hostname;
+            let in_aliases = entry.aliases.contains(&hostname.to_string());
+            if in_canonical || in_aliases {
+                if in_canonical {
+                    if !entry.aliases.is_empty() {
+                        entry.canonical = entry.aliases.remove(0);
+                    } else {
+                        entry.canonical.clear();
+                    }
+                }
+                if in_aliases {
+                    entry.aliases.retain(|h| h != hostname);
+                }
                 to_add.push((entry.disabled, entry.comment.clone()));
                 moved += 1;
             }
         }
-        entries.retain(|e| !e.hostnames.is_empty());
+        entries.retain(|e| !e.canonical.is_empty() || !e.aliases.is_empty());
 
         if moved == 0 {
             return Ok(0);
@@ -348,8 +416,8 @@ impl Store {
         let was_disabled = to_add.iter().all(|(d, _)| *d);
         let comment = to_add.into_iter().find_map(|(_, c)| c);
         if let Some(existing) = entries.iter_mut().find(|e| e.ip == new_ip) {
-            if !existing.hostnames.contains(&hostname.to_string()) {
-                existing.hostnames.push(hostname.to_string());
+            if existing.canonical != hostname && !existing.aliases.contains(&hostname.to_string()) {
+                existing.aliases.push(hostname.to_string());
             }
             if was_disabled {
                 existing.disabled = true;
@@ -359,7 +427,8 @@ impl Store {
             entries.push(Entry {
                 id,
                 ip: new_ip.to_string(),
-                hostnames: vec![hostname.to_string()],
+                canonical: hostname.to_string(),
+                aliases: vec![],
                 comment,
                 disabled: was_disabled,
                 raw: None,
@@ -372,6 +441,7 @@ impl Store {
 
     /// Verify the hosts file. Returns structured issues (line, ip, host, issue).
     pub fn verify(&self) -> io::Result<Vec<(usize, String, String, String)>> {
+        validation::validate_secure_path(&self.path)?;
         let content = fs::read_to_string(&self.path)?;
 
         let mut issues: Vec<(usize, String, String, String)> = Vec::new();
@@ -588,7 +658,8 @@ mod tests {
         let entries = store.load().unwrap();
         assert_eq!(entries.len(), 1);
         assert!(!entries[0].disabled);
-        assert_eq!(entries[0].hostnames, vec!["app.local"]);
+        assert_eq!(entries[0].canonical, "app.local");
+        assert!(entries[0].aliases.is_empty());
     }
 
     #[test]
@@ -714,7 +785,267 @@ mod tests {
 
         let entries = store.load().unwrap();
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].hostnames, vec!["b.local"]);
+        assert_eq!(entries[0].canonical, "b.local");
+        assert!(entries[0].aliases.is_empty());
         assert!(!entries[0].disabled);
+    }
+    #[test]
+    fn test_all_rows_canonical() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 app.local api.local\n").unwrap();
+        let store = Store::new(&path);
+        let rows = store.all_rows().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].canonical, Some("app.local".to_string()));
+        assert_eq!(rows[0].aliases, vec!["api.local"]);
+    }
+
+    #[test]
+    fn test_all_rows_single_hostname() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 solo.local\n").unwrap();
+        let store = Store::new(&path);
+        let rows = store.all_rows().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].canonical, Some("solo.local".to_string()));
+        assert!(rows[0].aliases.is_empty());
+    }
+
+    #[test]
+    fn test_remove_canonical_promotes_alias() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 primary.local secondary.local\n").unwrap();
+        let store = Store::new(&path);
+        store.remove_hostnames(&["primary.local".into()]).unwrap();
+        let entries = store.load().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].canonical, "secondary.local");
+        assert!(entries[0].aliases.is_empty());
+    }
+
+    #[test]
+    fn test_remove_alias_only() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 primary.local secondary.local\n").unwrap();
+        let store = Store::new(&path);
+        store.remove_hostnames(&["secondary.local".into()]).unwrap();
+        let entries = store.load().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].canonical, "primary.local");
+        assert!(entries[0].aliases.is_empty());
+    }
+
+    #[test]
+    fn test_disable_canonical_promotes_alias() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 primary.local secondary.local\n").unwrap();
+        let store = Store::new(&path);
+        store.disable_hostname(&["primary.local".into()]).unwrap();
+        let entries = store.load().unwrap();
+        let enabled: Vec<_> = entries.iter().filter(|e| !e.disabled).collect();
+        assert_eq!(enabled.len(), 1);
+        assert_eq!(enabled[0].canonical, "secondary.local");
+        let disabled: Vec<_> = entries.iter().filter(|e| e.disabled).collect();
+        assert_eq!(disabled.len(), 1);
+        assert_eq!(disabled[0].canonical, "primary.local");
+    }
+
+    #[test]
+    fn test_edit_moves_canonical() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 myhost.local\n").unwrap();
+        let store = Store::new(&path);
+        store.move_hostname("myhost.local", "10.0.0.99").unwrap();
+        let entries = store.load().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].ip, "10.0.0.99");
+        assert_eq!(entries[0].canonical, "myhost.local");
+    }
+
+    #[test]
+    fn test_move_hostname_leaves_other_aliases() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "10.0.0.1 primary.local secondary.local\n").unwrap();
+        let store = Store::new(&path);
+        store.move_hostname("secondary.local", "10.0.0.99").unwrap();
+        let entries = store.load().unwrap();
+        let orig: Vec<_> = entries.iter().filter(|e| e.ip == "10.0.0.1").collect();
+        assert_eq!(orig.len(), 1);
+        assert_eq!(orig[0].canonical, "primary.local");
+        let new: Vec<_> = entries.iter().filter(|e| e.ip == "10.0.0.99").collect();
+        assert_eq!(new.len(), 1);
+        assert_eq!(new[0].canonical, "secondary.local");
+    }
+
+    #[test]
+    fn test_add_same_ip_different_canonical_creates_new_entry() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hosts");
+        fs::write(&path, "55.55.55.55 xxx.com zzz.com\n").unwrap();
+        let store = Store::new(&path);
+        store
+            .add_entry("55.55.55.55", &["yyy.com".into(), "aaa.com".into()], None)
+            .unwrap();
+        let entries = store.load().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].canonical, "xxx.com");
+        assert_eq!(entries[1].canonical, "yyy.com");
+
+        #[test]
+        fn test_all_rows_canonical() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "10.0.0.1 app.local api.local
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            let rows = store.all_rows().unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].canonical, Some("app.local".to_string()));
+            assert_eq!(rows[0].aliases, vec!["api.local"]);
+        }
+
+        #[test]
+        fn test_all_rows_single_hostname() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "10.0.0.1 solo.local
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            let rows = store.all_rows().unwrap();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].canonical, Some("solo.local".to_string()));
+            assert!(rows[0].aliases.is_empty());
+        }
+
+        #[test]
+        fn test_remove_canonical_promotes_alias() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "10.0.0.1 primary.local secondary.local
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            store.remove_hostnames(&["primary.local".into()]).unwrap();
+            let entries = store.load().unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].canonical, "secondary.local");
+            assert!(entries[0].aliases.is_empty());
+        }
+
+        #[test]
+        fn test_remove_alias_only() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "10.0.0.1 primary.local secondary.local
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            store.remove_hostnames(&["secondary.local".into()]).unwrap();
+            let entries = store.load().unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].canonical, "primary.local");
+            assert!(entries[0].aliases.is_empty());
+        }
+
+        #[test]
+        fn test_disable_canonical_promotes_alias() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "10.0.0.1 primary.local secondary.local
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            store.disable_hostname(&["primary.local".into()]).unwrap();
+            let entries = store.load().unwrap();
+            let enabled: Vec<_> = entries.iter().filter(|e| !e.disabled).collect();
+            assert_eq!(enabled.len(), 1);
+            assert_eq!(enabled[0].canonical, "secondary.local");
+            let disabled: Vec<_> = entries.iter().filter(|e| e.disabled).collect();
+            assert_eq!(disabled.len(), 1);
+            assert_eq!(disabled[0].canonical, "primary.local");
+        }
+
+        #[test]
+        fn test_edit_moves_canonical() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "10.0.0.1 myhost.local
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            store.move_hostname("myhost.local", "10.0.0.99").unwrap();
+            let entries = store.load().unwrap();
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].ip, "10.0.0.99");
+            assert_eq!(entries[0].canonical, "myhost.local");
+        }
+
+        #[test]
+        fn test_move_hostname_leaves_other_aliases() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "10.0.0.1 primary.local secondary.local
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            store.move_hostname("secondary.local", "10.0.0.99").unwrap();
+            let entries = store.load().unwrap();
+            let orig: Vec<_> = entries.iter().filter(|e| e.ip == "10.0.0.1").collect();
+            assert_eq!(orig.len(), 1);
+            assert_eq!(orig[0].canonical, "primary.local");
+            let new: Vec<_> = entries.iter().filter(|e| e.ip == "10.0.0.99").collect();
+            assert_eq!(new.len(), 1);
+            assert_eq!(new[0].canonical, "secondary.local");
+        }
+
+        #[test]
+        fn test_add_same_ip_different_canonical_creates_new_entry() {
+            let dir = tempdir().unwrap();
+            let path = dir.path().join("hosts");
+            fs::write(
+                &path,
+                "55.55.55.55 xxx.com zzz.com
+",
+            )
+            .unwrap();
+            let store = Store::new(&path);
+            store
+                .add_entry("55.55.55.55", &["yyy.com".into(), "aaa.com".into()], None)
+                .unwrap();
+            let entries = store.load().unwrap();
+            assert_eq!(entries.len(), 2);
+            assert_eq!(entries[0].canonical, "xxx.com");
+            assert_eq!(entries[1].canonical, "yyy.com");
+        }
     }
 }
