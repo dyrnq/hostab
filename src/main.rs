@@ -22,7 +22,8 @@ fn main() {
             }
             | Commands::Completion { .. }
             | Commands::Version
-            | Commands::Cat => {}
+            | Commands::Cat
+            | Commands::Serve { .. } => {}
             _ => eprintln!(
                 "Warning: modifying {} may require root privileges.",
                 cli.hosts_file.display()
@@ -63,6 +64,7 @@ fn main() {
             }
             EntryCommands::Edit { host, ip } => cli::entry::handle_edit(&cli, host, ip),
         },
+        Commands::Serve { port } => cli::serve::handle(&cli, *port),
         Commands::Verify { strict } => cli::verify::handle_verify(&cli, *strict),
         Commands::Merge { src, target } => {
             cli::merge::handle(&cli, src, target.as_ref());

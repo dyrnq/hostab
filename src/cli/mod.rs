@@ -1,6 +1,7 @@
 pub mod entry;
 pub mod merge;
 pub mod resolve;
+pub mod serve;
 pub mod verify;
 
 use crate::core::model::Row;
@@ -76,6 +77,13 @@ pub enum Commands {
 
     /// Show detailed version info
     Version,
+
+    /// Start HTTP REST API server
+    Serve {
+        /// Port to listen on
+        #[arg(short, long, default_value = "3456")]
+        port: u16,
+    },
 }
 
 // ── Entry subcommands ──────────────────────────────────────────
