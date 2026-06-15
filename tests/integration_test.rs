@@ -471,8 +471,15 @@ fn start_server(hosts_content: &str, port: u16) -> (tempfile::TempDir, std::proc
         .spawn()
         .expect("failed to start server");
 
-    std::thread::sleep(std::time::Duration::from_millis(1200));
-    (dir, child)
+    // Poll until server is ready (up to 10 seconds)
+    let url = format!("http://127.0.0.1:{}/api/entries", port);
+    for _ in 0..100 {
+        if ureq::get(&url).call().is_ok() {
+            return (dir, child);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("server failed to start on port {} within 10s", port);
 }
 
 fn get_json(url: &str) -> serde_json::Value {
