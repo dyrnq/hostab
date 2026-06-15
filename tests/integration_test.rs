@@ -457,7 +457,7 @@ fn start_server(hosts_content: &str, port: u16) -> (tempfile::TempDir, std::proc
     let path = dir.path().join("hosts");
     std::fs::write(&path, hosts_content).unwrap();
 
-    let child = std::process::Command::new(hostab_bin())
+    let mut child = std::process::Command::new(hostab_bin())
         .args([
             "--hosts-file",
             path.to_str().unwrap(),
@@ -479,6 +479,8 @@ fn start_server(hosts_content: &str, port: u16) -> (tempfile::TempDir, std::proc
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+    let _ = child.kill();
+    let _ = child.wait();
     panic!("server failed to start on port {} within 10s", port);
 }
 
