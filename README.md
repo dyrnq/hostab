@@ -1,20 +1,22 @@
 # hostab
 
-
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/dyrnq/hostab/actions/workflows/ci.yml/badge.svg)](https://github.com/dyrnq/hostab/actions/workflows/ci.yml)
 
 **Your dev tool to manage `/etc/hosts` like a pro — written in Rust.**
 
-A fast, safe hosts file manager distributed as a single static binary.
+A fast, safe hosts file manager distributed as a single static binary, with a REST API server and Swagger UI.
 
 ## Why hostab?
 
-- **Atomic writes** — write to `.tmp`, `fsync`, `rename` (no partial writes)
+- **Atomic writes** — `NamedTempFile` → `sync_all` → `persist` (no partial writes, no TOCTOU)
 - **File locking** — `flock` prevents concurrent modification
 - **DNS resolution** — forward and reverse lookups via hickory-resolver
 - **Filter & search** — wildcard / regex filter, auto-detect pattern type
-- **Merge** — combine hosts files from local or remote sources
+- **Merge** — combine hosts files from local or remote sources (SSRF-safe)
 - **Multi-format output** — table, raw TSV, markdown, JSON
+- **REST API** — serve with OpenAPI docs, full CRUD + disable/enable/toggle
+- **Canonical / Alias awareness** — first hostname is canonical, per POSIX /etc/hosts semantics
 
 ## Installation
 
@@ -27,7 +29,7 @@ Or download from [releases](https://github.com/dyrnq/hostab/releases) (Linux x86
 ## Quick Start
 
 ```bash
-# List (compact by default)
+# List
 hostab e list
 
 # Filter with auto-detect (*/? → glob, else substring)
@@ -41,11 +43,14 @@ hostab e list --ipv4
 hostab e add 10.0.0.1 app.local api.local
 hostab e add 10.0.0.2 db.local --comment "database"
 
+# Add with explicit canonical and aliases
+hostab e add 10.0.0.1 --canonical app.local --alias api.local
+
 # Remove
 hostab e rm app.local
 hostab e rm --ip 10.0.0.1
 
-# Enable / disable / toggle (auto-split from shared IP)
+# Enable / disable / toggle (auto-split from shared IP, alias promotes)
 hostab e disable api.local
 hostab e enable api.local
 hostab e toggle api.local
@@ -64,6 +69,10 @@ hostab merge -s ./dev-hosts -s https://example.com/hosts
 
 # Validate (table output with LINE/IP/HOST/ISSUE)
 hostab verify
+
+# Start REST API server (default: 127.0.0.1:3456)
+hostab serve
+hostab serve --port 8080 --bind 0.0.0.0
 ```
 
 ## Commands
@@ -72,10 +81,10 @@ hostab verify
 
 | Command | Description |
 |---|---|
-| `e list [--ipv4\|--ipv6] [--expand] [-f FILTER] [-i]` | List entries, auto-detect filter |
-| `e add <ip> <hosts...> [--comment X]` | Add or merge entry |
+| `e list [--ipv4\|--ipv6] [-f FILTER] [-i]` | List entries, auto-detect filter |
+| `e add <ip> <hosts...> [--canonical X] [--alias X...] [--comment X]` | Add entry, first hostname is canonical |
 | `e rm <hosts...> [--ip X]` | Remove by hostname or IP |
-| `e disable <hosts...> [--ip X]` | Comment out (split from shared IP) |
+| `e disable <hosts...> [--ip X]` | Comment out (alias promotes to canonical) |
 | `e enable <hosts...> [--ip X]` | Uncomment (merge back) |
 | `e toggle <host> [--ip X]` | Flip enabled/disabled |
 | `e edit <host> --ip X` | Move hostname to new IP |
@@ -84,12 +93,28 @@ hostab verify
 
 | Command | Description |
 |---|---|
+| `serve [--port P] [--bind ADDR] [--no-docs]` | Start REST API server with Swagger UI |
 | `resolve <hosts...> [-l]` | DNS forward/reverse lookup, `-l` for local only |
-| `merge -s <src...> [-t <target>]` | Merge from files/URLs |
+| `merge -s <src...> [-t <target>]` | Merge from files/URLs (SSRF-protected) |
 | `verify [--strict]` | Validate, table output (LINE/IP/HOST/ISSUE) |
 | `cat` | Print raw hosts file |
 | `completion <bash\|zsh\|fish>` | Shell completion |
 | `version` | Version + commit + build date |
+
+### REST API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/entries` | List entries (`?ip=`, `?hostname=`, `?filter=`) |
+| `POST` | `/api/entries` | Add entry `{"ip":"...","hosts":[...],"comment":"..."}` |
+| `DELETE` | `/api/entries/{hostname}` | Remove by hostname |
+| `DELETE` | `/api/entries?ip=X` | Remove by IP |
+| `PUT` | `/api/entries/{hostname}` | Edit: move to new IP `{"ip":"..."}` |
+| `PUT` | `/api/entries/{hostname}/disable` | Disable hostname |
+| `PUT` | `/api/entries/{hostname}/enable` | Enable hostname |
+| `PUT` | `/api/entries/{hostname}/toggle` | Toggle hostname |
+
+OpenAPI 3.1 spec at `/api/openapi.json`, Swagger UI at `/docs` (omit with `--no-docs`).
 
 ## Filter (auto-detect)
 
@@ -102,18 +127,18 @@ hostab e list -f local -i   # case insensitive
 
 ## Output Formats
 
-`--out table` (default, compact):
+`--out table` (default, expanded):
 
 ```
-│ ip            │ host                │ comment  │
-├───────────────┼─────────────────────┼──────────┤
-│ 127.0.0.1     │ localhost           │          │
-│ 10.0.0.1      │ app.local api.local │          │
+│ ip            │ host                 │ comment │ canonical    │
+├───────────────┼──────────────────────┼─────────┼──────────────┤
+│ 127.0.0.1     │ localhost            │         │ localhost    │
+│ 10.0.0.1      │ app.local api.local  │         │ app.local    │
 ```
 
-`--out json`:  `[{"ip":"127.0.0.1","host":"localhost","comment":null}]`
+`--out json`:  `[{"ip":"127.0.0.1","host":"localhost","comment":null,"canonical":"localhost","aliases":[]}]`
 
-`--out raw`: tab-separated; `--out markdown`: GitHub-flavored table.
+`--out raw`: tab-separated with CANONICAL column; `--out markdown`: GitHub-flavored table.
 
 ## Verify output
 
@@ -136,10 +161,14 @@ hostab e list -f local -i   # case insensitive
 
 ## Safety
 
-- **Atomic writes** — `.tmp` → `fsync` → `rename`
+- **Atomic writes** — `NamedTempFile` → `sync_all` → `persist` (no TOCTOU)
 - **File locking** — `flock` prevents concurrent access
+- **Path validation** — path traversal and null byte checks on all reads/writes
+- **Input validation** — IP, hostname, and comment validation on API endpoints
+- **SSRF protection** — merge blocks requests to private/reserved IP ranges
+- **Rate limited API** — server defaults to 127.0.0.1 with concurrent connection limit
 - **Duplicate detection** — warns on re-add, verify finds duplicates
-- **Split/merge** — disable/enable preserves co-hosted hostnames
+- **Canonical/Alias semantics** — first hostname is canonical per POSIX, alias promotes on removal
 
 ## License
 
