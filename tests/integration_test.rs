@@ -56,34 +56,40 @@ fn test_json_output() {
 
 #[test]
 fn test_add_entry() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "").unwrap();
 
-    hostab_with_file(path, &["e", "add", "10.99.0.10", "test-add.local", "-q"]);
-    let out = hostab_with_file(path, &["e", "list", "-o", "raw"]);
+    hostab_with_file(
+        path_str,
+        &["e", "add", "10.99.0.10", "test-add.local", "-q"],
+    );
+    let out = hostab_with_file(path_str, &["e", "list", "-o", "raw"]);
     assert!(out.contains("test-add.local"), "should have added entry");
 }
 
 #[test]
 fn test_rm_entry() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.99.0.10 test-rm.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.99.0.10 test-rm.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "rm", "test-rm.local", "-q"]);
-    let out = hostab_with_file(path, &["e", "list", "-o", "raw"]);
+    hostab_with_file(path_str, &["e", "rm", "test-rm.local", "-q"]);
+    let out = hostab_with_file(path_str, &["e", "list", "-o", "raw"]);
     assert!(!out.contains("test-rm.local"), "should have removed entry");
 }
 
 #[test]
 fn test_rm_by_ip() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.99.0.20 ip-rm.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.99.0.20 ip-rm.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "rm", "--ip", "10.99.0.20", "-q"]);
-    let out = hostab_with_file(path, &["e", "list", "-o", "raw"]);
+    hostab_with_file(path_str, &["e", "rm", "--ip", "10.99.0.20", "-q"]);
+    let out = hostab_with_file(path_str, &["e", "list", "-o", "raw"]);
     assert!(!out.contains("ip-rm.local"), "should have removed by IP");
 }
 
@@ -98,46 +104,52 @@ fn test_filter() {
 
 #[test]
 fn test_disable_enable() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local api.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local api.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "disable", "api.local", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "disable", "api.local", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(
         raw.contains("# 10.0.0.1 api.local"),
         "should comment out api.local"
     );
     assert!(raw.contains("10.0.0.1 app.local"), "should keep app.local");
 
-    hostab_with_file(path, &["e", "enable", "api.local", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "enable", "api.local", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(raw.contains("app.local api.local"), "should merge back");
 }
 
 #[test]
 fn test_toggle() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "toggle", "app.local", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "toggle", "app.local", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(raw.contains("# 10.0.0.1 app.local"), "toggle off");
 
-    hostab_with_file(path, &["e", "toggle", "app.local", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "toggle", "app.local", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(raw.contains("10.0.0.1 app.local"), "toggle on");
 }
 
 #[test]
 fn test_edit() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local api.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local api.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "edit", "api.local", "--ip", "10.0.0.99", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(
+        path_str,
+        &["e", "edit", "api.local", "--ip", "10.0.0.99", "-q"],
+    );
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(
         raw.contains("10.0.0.1 app.local"),
         "old IP should keep app.local"
@@ -203,11 +215,12 @@ fn test_version() {
 
 #[test]
 fn test_empty_file_list() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "").unwrap();
 
-    let out = hostab_with_file(path, &["e", "list", "-o", "raw"]);
+    let out = hostab_with_file(path_str, &["e", "list", "-o", "raw"]);
     // Should handle empty file gracefully (just header)
     assert!(out.contains("IP"), "should output header");
 }
@@ -223,13 +236,14 @@ fn test_filter_no_match() {
 
 #[test]
 fn test_filter_regex_chars() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
     // Use separate IPs so compact mode doesn't merge rows
-    std::fs::write(path, "10.0.0.1 plain.local\n10.0.0.2 test.local\n").unwrap();
+    std::fs::write(&path, "10.0.0.1 plain.local\n10.0.0.2 test.local\n").unwrap();
 
     // Filter `*` (glob) should match all hostnames
-    let out = hostab_with_file(path, &["e", "list", "-f", "*", "-o", "raw"]);
+    let out = hostab_with_file(path_str, &["e", "list", "-f", "*", "-o", "raw"]);
     assert!(
         out.contains("plain.local"),
         "wildcard filter should match plain.local"
@@ -240,7 +254,7 @@ fn test_filter_regex_chars() {
     );
 
     // Substring filter (no wildcards) should only match the target
-    let out2 = hostab_with_file(path, &["e", "list", "-f", "plain", "-o", "raw"]);
+    let out2 = hostab_with_file(path_str, &["e", "list", "-f", "plain", "-o", "raw"]);
     assert!(
         out2.contains("plain.local"),
         "substring should match plain.local"
@@ -253,24 +267,29 @@ fn test_filter_regex_chars() {
 
 #[test]
 fn test_add_with_invalid_ip() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "").unwrap();
 
     // add doesn't validate IP, so add with "999.999.999.999" should still store it
-    hostab_with_file(path, &["e", "add", "999.999.999.999", "bad-ip.local", "-q"]);
-    let out = hostab_with_file(path, &["e", "list", "-o", "raw"]);
+    hostab_with_file(
+        path_str,
+        &["e", "add", "999.999.999.999", "bad-ip.local", "-q"],
+    );
+    let out = hostab_with_file(path_str, &["e", "list", "-o", "raw"]);
     assert!(out.contains("999.999.999.999"), "stores invalid IP as-is");
 }
 
 #[test]
 fn test_rm_empties_file() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 lone.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 lone.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "rm", "lone.local", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "rm", "lone.local", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(
         raw.trim().is_empty(),
         "file should be empty after removing last entry"
@@ -279,26 +298,28 @@ fn test_rm_empties_file() {
 
 #[test]
 fn test_add_merge_existing_ip() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local\n").unwrap();
 
     hostab_with_file(
-        path,
+        path_str,
         &["e", "add", "10.0.0.1", "app.local", "api.local", "-q"],
     );
-    let raw = std::fs::read_to_string(path).unwrap();
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(raw.contains("app.local api.local") || raw.contains("api.local app.local"));
 }
 
 #[test]
 fn test_add_no_duplicate_same_ip() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "add", "10.0.0.1", "app.local", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "add", "10.0.0.1", "app.local", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     // Should still only have one app.local
     let count = raw.matches("app.local").count();
     assert_eq!(count, 1, "should not duplicate hostname on same IP");
@@ -306,13 +327,14 @@ fn test_add_no_duplicate_same_ip() {
 
 #[test]
 fn test_disable_nonexistent() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local\n").unwrap();
 
     // disable a hostname that doesn't exist - should be harmless
-    hostab_with_file(path, &["e", "disable", "nonexistent", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "disable", "nonexistent", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(
         raw.contains("10.0.0.1 app.local"),
         "existing entry preserved"
@@ -321,61 +343,65 @@ fn test_disable_nonexistent() {
 
 #[test]
 fn test_enable_nonexistent() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local\n").unwrap();
 
-    hostab_with_file(path, &["e", "enable", "nonexistent", "-q"]);
-    let raw = std::fs::read_to_string(path).unwrap();
+    hostab_with_file(path_str, &["e", "enable", "nonexistent", "-q"]);
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(raw.contains("app.local"), "existing entry preserved");
 }
 
 #[test]
 fn test_toggle_roundtrip() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local\n").unwrap();
 
     // Toggle 4 times: on -> off -> on -> off -> on
-    hostab_with_file(path, &["e", "toggle", "app.local", "-q"]);
-    assert!(std::fs::read_to_string(path)
+    hostab_with_file(path_str, &["e", "toggle", "app.local", "-q"]);
+    assert!(std::fs::read_to_string(path_str)
         .unwrap()
         .contains("# 10.0.0.1 app.local"));
-    hostab_with_file(path, &["e", "toggle", "app.local", "-q"]);
-    assert!(std::fs::read_to_string(path)
+    hostab_with_file(path_str, &["e", "toggle", "app.local", "-q"]);
+    assert!(std::fs::read_to_string(path_str)
         .unwrap()
         .contains("10.0.0.1 app.local\n"));
-    hostab_with_file(path, &["e", "toggle", "app.local", "-q"]);
-    assert!(std::fs::read_to_string(path)
+    hostab_with_file(path_str, &["e", "toggle", "app.local", "-q"]);
+    assert!(std::fs::read_to_string(path_str)
         .unwrap()
         .contains("# 10.0.0.1 app.local"));
-    hostab_with_file(path, &["e", "toggle", "app.local", "-q"]);
-    assert!(std::fs::read_to_string(path)
+    hostab_with_file(path_str, &["e", "toggle", "app.local", "-q"]);
+    assert!(std::fs::read_to_string(path_str)
         .unwrap()
         .contains("10.0.0.1 app.local\n"));
 }
 
 #[test]
 fn test_edit_nonexistent() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1 app.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1 app.local\n").unwrap();
 
     hostab_with_file(
-        path,
+        path_str,
         &["e", "edit", "nonexistent", "--ip", "10.0.0.99", "-q"],
     );
-    let raw = std::fs::read_to_string(path).unwrap();
+    let raw = std::fs::read_to_string(path_str).unwrap();
     assert!(raw.contains("app.local"), "original entry preserved");
 }
 
 #[test]
 fn test_verify_clean() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "127.0.0.1 localhost\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "127.0.0.1 localhost\n").unwrap();
 
-    let out = hostab_with_file(path, &["verify"]);
+    let out = hostab_with_file(path_str, &["verify"]);
     assert!(
         out.contains("No issues found"),
         "clean file reports no issues"
@@ -384,21 +410,23 @@ fn test_verify_clean() {
 
 #[test]
 fn test_verify_invalid_ip() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "not-an-ip host.local\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "not-an-ip host.local\n").unwrap();
 
-    let out = hostab_with_file(path, &["verify"]);
+    let out = hostab_with_file(path_str, &["verify"]);
     assert!(out.contains("invalid IP"), "reports invalid IP");
 }
 
 #[test]
 fn test_verify_missing_hostname() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "10.0.0.1\n").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "10.0.0.1\n").unwrap();
 
-    let out = hostab_with_file(path, &["verify"]);
+    let out = hostab_with_file(path_str, &["verify"]);
     assert!(out.contains("missing hostname"), "reports missing hostname");
 }
 
@@ -426,11 +454,12 @@ fn test_merge_empty_source() {
 
 #[test]
 fn test_cat_empty() {
-    let tmp = tempfile::NamedTempFile::new().unwrap();
-    let path = tmp.path().to_str().unwrap();
-    std::fs::write(path, "").unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hosts");
+    let path_str = path.to_str().unwrap();
+    std::fs::write(&path, "").unwrap();
 
-    let out = hostab_with_file(path, &["cat"]);
+    let out = hostab_with_file(path_str, &["cat"]);
     assert_eq!(out.trim(), "");
 }
 
