@@ -27,7 +27,7 @@ pub struct Cli {
     #[arg(short = 'o', long, default_value = "table", global = true)]
     pub out: String,
 
-    /// Disable colored output
+        /// Disable colored output
     #[arg(long, global = true)]
     pub no_color: bool,
 
@@ -195,6 +195,11 @@ pub enum EntryCommands {
 pub fn print_output(cli: &Cli, rows: &[Row]) {
     if cli.quiet {
         return;
+    }
+
+    // Respect NO_COLOR standard
+    if cli.no_color {
+        std::env::set_var("NO_COLOR", "1");
     }
 
     let output_str = match cli.out.as_str() {

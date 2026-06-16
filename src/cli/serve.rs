@@ -564,8 +564,8 @@ pub fn handle(cli: &crate::cli::Cli, port: u16, bind: &str, no_docs: bool) {
         .route("/api/entries/{hostname}/enable", put(enable_entry))
         .route("/api/entries/{hostname}/toggle", put(toggle_entry))
         .route("/api/entries", delete(remove_by_ip))
-        // Limit concurrent requests to 32 workers
-        .layer(tower_http::limit::RequestBodyLimitLayer::new(65536 * 1024))
+        // Limit request body to 64KB
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(65536))
         // Limit concurrent requests to 32 workers
         .layer(tower::limit::ConcurrencyLimitLayer::new(32))
         .layer(tower_http::cors::CorsLayer::new())
