@@ -6,6 +6,7 @@ mod output;
 mod store;
 mod util;
 
+use cli::Shell;
 use cli::{Cli, Commands, EntryCommands};
 
 fn main() {
@@ -93,11 +94,10 @@ fn main() {
             use clap::CommandFactory;
             use clap_complete::{generate, shells};
             let mut cmd = Cli::command();
-            match shell.as_str() {
-                "bash" => generate(shells::Bash, &mut cmd, "hostab", &mut std::io::stdout()),
-                "zsh" => generate(shells::Zsh, &mut cmd, "hostab", &mut std::io::stdout()),
-                "fish" => generate(shells::Fish, &mut cmd, "hostab", &mut std::io::stdout()),
-                _ => eprintln!("Unsupported shell: {}. Supported: bash, zsh, fish", shell),
+            match shell {
+                Shell::Bash => generate(shells::Bash, &mut cmd, "hostab", &mut std::io::stdout()),
+                Shell::Zsh => generate(shells::Zsh, &mut cmd, "hostab", &mut std::io::stdout()),
+                Shell::Fish => generate(shells::Fish, &mut cmd, "hostab", &mut std::io::stdout()),
             }
         }
         Commands::Version => {
