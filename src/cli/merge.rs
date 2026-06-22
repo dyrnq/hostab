@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::{self, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 pub fn handle(cli: &crate::cli::Cli, srcs: &[String], target: Option<&PathBuf>) -> bool {
@@ -48,6 +49,17 @@ pub fn handle(cli: &crate::cli::Cli, srcs: &[String], target: Option<&PathBuf>) 
             return false;
         }
     };
+    // Preserve original file permissions to avoid locking out regular users
+    let orig_perms = fs::metadata(&target_path)
+        .ok()
+        .map(|m| m.permissions().mode());
+    let mode = orig_perms.unwrap_or(0o100644);
+    if let Err(e) = tmp
+        .as_file()
+        .set_permissions(fs::Permissions::from_mode(mode & 0o777))
+    {
+        eprintln!("Warning: failed to set permissions: {}", e);
+    }
     if tmp.write_all(output.as_bytes()).is_err() {
         return false;
     }

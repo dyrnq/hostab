@@ -27,7 +27,7 @@ pub struct Cli {
     #[arg(short = 'o', long, default_value = "table", global = true)]
     pub out: String,
 
-        /// Disable colored output
+    /// Disable colored output
     #[arg(long, global = true)]
     pub no_color: bool,
 

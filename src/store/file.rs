@@ -1,5 +1,7 @@
 use std::fs;
+use std::fs::Permissions;
 use std::io::{self, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use crate::core::model::{Entry, Row};
@@ -43,6 +45,10 @@ impl Store {
     /// Save entries atomically
     pub fn save(&self, entries: &[Entry]) -> io::Result<()> {
         validation::validate_secure_path(&self.path)?;
+        // Snapshot original permissions before creating/removing any files
+        let orig_perms = fs::metadata(&self.path)
+            .ok()
+            .map(|m| m.permissions().mode());
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -54,6 +60,13 @@ impl Store {
             .unwrap_or_else(|| std::path::Path::new("."));
         let mut tmp = tempfile::NamedTempFile::new_in(dir)
             .map_err(|e| io::Error::other(format!("failed to create temp file: {}", e)))?;
+        // Preserve original file permissions so regular users can still read
+        // /etc/hosts after root saves it. Default to 0644 if file doesn't exist.
+        let mode = orig_perms.unwrap_or(0o100644);
+        let perms = Permissions::from_mode(mode & 0o777);
+        tmp.as_file()
+            .set_permissions(perms)
+            .map_err(|e| io::Error::other(format!("failed to set permissions: {}", e)))?;
         tmp.write_all(content.as_bytes())?;
         tmp.flush()?;
         tmp.as_file().sync_all()?;
