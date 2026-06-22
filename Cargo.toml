@@ -24,7 +24,7 @@ chrono = { version = "0.4", features = ["serde"] }
 ureq = { version = "3", features = ["json"] }
 libc = "0.2"
 axum = "0.8"
-tower-http = { version = "0.6", features = ["cors", "limit"] }
+tower-http = { version = "0.7", features = ["cors", "limit"] }
 tower = { version = "0.5", features = ["limit"] }
 utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
