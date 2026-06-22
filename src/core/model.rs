@@ -7,7 +7,9 @@ pub struct Entry {
     pub aliases: Vec<String>,
     pub comment: Option<String>,
     pub disabled: bool,
+    /// Raw line content — preserved for future use
     #[serde(skip)]
+    #[allow(dead_code)]
     pub raw: Option<String>,
 }
 
@@ -22,13 +24,4 @@ pub struct Row {
     pub canonical: Option<String>,
     /// Alias hostnames (empty if none)
     pub aliases: Vec<String>,
-}
-
-/// Search match info
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SearchMatch {
-    pub entry_id: Option<usize>,
-    pub field: String,
-    pub matched_text: String,
-    pub line: String,
 }

@@ -53,7 +53,6 @@ pub fn handle(cli: &crate::cli::Cli, srcs: &[String], target: Option<&PathBuf>) 
     #[cfg(unix)]
     {
         // Preserve original file permissions to avoid locking out regular users
-        use std::os::unix::fs::PermissionsExt;
         let orig_perms = fs::metadata(&target_path)
             .ok()
             .map(|m| m.permissions().mode());
@@ -200,27 +199,19 @@ fn remove_previous_merges(content: &str) -> String {
     let lines: Vec<&str> = content.lines().collect();
     let mut result: Vec<&str> = Vec::new();
     let mut skip = false;
-    let mut i = 0;
-    while i < lines.len() {
-        let line = lines[i];
+    for line in &lines {
         if line.starts_with("### source:") {
             skip = true;
-            i += 1;
             continue;
         }
         if skip {
-            if line.trim().is_empty() || line.starts_with("### source:") {
+            if line.trim().is_empty() {
                 skip = false;
-                if line.starts_with("### source:") {
-                    continue;
-                }
             } else {
-                i += 1;
                 continue;
             }
         }
         result.push(line);
-        i += 1;
     }
     result.join("\n")
 }

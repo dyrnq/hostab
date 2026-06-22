@@ -7,11 +7,13 @@ pub fn is_valid_ip(ip: &str) -> bool {
 }
 
 /// Validate IPv4
+#[allow(dead_code)]
 pub fn is_valid_ipv4(ip: &str) -> bool {
     ip.parse::<std::net::Ipv4Addr>().is_ok()
 }
 
 /// Validate IPv6
+#[allow(dead_code)]
 pub fn is_valid_ipv6(ip: &str) -> bool {
     ip.parse::<std::net::Ipv6Addr>().is_ok()
 }
@@ -37,6 +39,7 @@ pub fn is_valid_comment(comment: &str) -> bool {
 }
 
 /// Normalize an IP address to its canonical form
+#[allow(dead_code)]
 pub fn normalize_ip(ip: &str) -> Option<String> {
     match ip.parse::<std::net::IpAddr>() {
         Ok(addr) => Some(addr.to_string()),
@@ -45,6 +48,7 @@ pub fn normalize_ip(ip: &str) -> Option<String> {
 }
 
 /// Normalize a hostname (lowercase, trim)
+#[allow(dead_code)]
 pub fn normalize_hostname(hostname: &str) -> String {
     hostname.trim().to_lowercase()
 }

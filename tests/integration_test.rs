@@ -272,13 +272,26 @@ fn test_add_with_invalid_ip() {
     let path_str = path.to_str().unwrap();
     std::fs::write(&path, "").unwrap();
 
-    // add doesn't validate IP, so add with "999.999.999.999" should still store it
-    hostab_with_file(
-        path_str,
-        &["e", "add", "999.999.999.999", "bad-ip.local", "-q"],
-    );
+    // CLI now validates IP and should exit with error
+    let output = std::process::Command::new(hostab_bin())
+        .args([
+            "--hosts-file",
+            path_str,
+            "e",
+            "add",
+            "999.999.999.999",
+            "bad-ip.local",
+            "-q",
+        ])
+        .output()
+        .expect("failed to run hostab");
+    assert!(!output.status.success(), "should reject invalid IP");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("invalid IP"), "should report invalid IP");
+
+    // Verify file remains unchanged
     let out = hostab_with_file(path_str, &["e", "list", "-o", "raw"]);
-    assert!(out.contains("999.999.999.999"), "stores invalid IP as-is");
+    assert!(!out.contains("999.999.999.999"), "should not store invalid IP");
 }
 
 #[test]

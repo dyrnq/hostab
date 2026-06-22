@@ -75,7 +75,3 @@ pub fn format_markdown(rows: &[Row]) -> String {
     }
     output
 }
-
-pub fn format_status(_rows: &[Row]) -> String {
-    String::new()
-}

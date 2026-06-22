@@ -29,10 +29,6 @@ impl Store {
         }
     }
 
-    pub fn with_default_path() -> Self {
-        Self::new(Path::new(DEFAULT_HOSTS_PATH))
-    }
-
     /// Load all entries
     pub fn load(&self) -> io::Result<Vec<Entry>> {
         if !self.path.exists() {
@@ -89,6 +85,7 @@ impl Store {
     }
 
     /// Get all entries as display rows
+    #[allow(dead_code)]
     pub fn all_rows(&self) -> io::Result<Vec<Row>> {
         let entries = self.load()?;
         let mut rows = Vec::new();
@@ -310,8 +307,12 @@ impl Store {
             }
         });
 
-        for entry in &mut kept_disabled {
-            entry.id = entries.iter().map(|e| e.id).max().unwrap_or(0) + 1;
+        {
+            let mut id = entries.iter().map(|e| e.id).max().unwrap_or(0);
+            for entry in &mut kept_disabled {
+                id += 1;
+                entry.id = id;
+            }
         }
         entries.append(&mut kept_disabled);
 

@@ -68,6 +68,10 @@ pub fn handle_add(
     aliases: &[String],
     comment: Option<&str>,
 ) {
+    if !crate::util::validation::is_valid_ip(ip) {
+        eprintln!("Error: invalid IP address: {}", ip);
+        std::process::exit(1);
+    }
     let canon: Vec<String> = if let Some(c) = canonical {
         // Explicit canonical, hosts are extra positionals
         let mut all = vec![c.to_string()];

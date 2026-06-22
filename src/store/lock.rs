@@ -28,6 +28,7 @@ impl FileLock {
     }
 
     /// Try to acquire a lock, returning immediately if not available
+    #[allow(dead_code)]
     pub fn try_lock(&mut self) -> io::Result<bool> {
         let file = File::create(&self.lock_path)?;
         match fs2::FileExt::try_lock_exclusive(&file) {
@@ -40,6 +41,7 @@ impl FileLock {
     }
 
     /// Try to acquire a lock with a timeout
+    #[allow(dead_code)]
     pub fn lock_with_timeout(&mut self, timeout: Duration) -> io::Result<bool> {
         let start = std::time::Instant::now();
         loop {
@@ -68,6 +70,7 @@ impl FileLock {
     }
 
     /// Execute a closure with the lock held
+    #[allow(dead_code)]
     pub fn with_lock<F, T>(&mut self, f: F) -> io::Result<T>
     where
         F: FnOnce() -> io::Result<T>,
