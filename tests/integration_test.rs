@@ -291,7 +291,10 @@ fn test_add_with_invalid_ip() {
 
     // Verify file remains unchanged
     let out = hostab_with_file(path_str, &["e", "list", "-o", "raw"]);
-    assert!(!out.contains("999.999.999.999"), "should not store invalid IP");
+    assert!(
+        !out.contains("999.999.999.999"),
+        "should not store invalid IP"
+    );
 }
 
 #[test]
