@@ -6,10 +6,18 @@ pub mod verify;
 
 use crate::core::model::Row;
 
-use clap::{Parser, Subcommand, ValueHint};
+use clap::{Parser, Subcommand, ValueHint, ValueEnum};
 use std::path::PathBuf;
 
 use crate::store::file::DEFAULT_HOSTS_PATH;
+
+/// Supported shell completion targets
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+}
 
 /// Your dev tool to manage /etc/hosts like a pro
 #[derive(Parser, Debug)]
@@ -71,8 +79,11 @@ pub enum Commands {
         target: Option<PathBuf>,
     },
 
-    /// Generate shell completion scripts
-    Completion { shell: String },
+/// Generate shell completion scripts
+    Completion {
+        /// Shell to generate completion for
+        shell: Shell,
+    },
 
     /// Show detailed version info
     Version,
@@ -104,7 +115,7 @@ pub enum EntryCommands {
         ipv4: bool,
 
         /// Show only IPv6 entries
-        #[arg(long, conflicts_with = "ipv4")]
+        #[arg(long)]
         ipv6: bool,
 
         /// Filter entries matching pattern (supports * and ? wildcards)
