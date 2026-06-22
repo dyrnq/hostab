@@ -157,7 +157,16 @@ hostab e list -f local -i   # case insensitive
 --hosts-file <PATH>   [env: HOSTS_FILE] [default: /etc/hosts]
 -q, --quiet
 -o, --out <FORMAT>    table, raw, markdown, json
+    --no-color        Disable colored output (also respects NO_COLOR env)
 ```
+
+## Notes
+
+- **Disabled entries** are hidden from `e list`. Use `e toggle <host>` or `e enable <host>` to restore a hostname you know.
+- **`verify` without `--strict`** prints issues without failing. With `--strict`, exits with code 1 if any issue is found.
+- **`cat`** performs path traversal and null byte checks before reading, same as other commands.
+- **`merge` without `--target`** writes to the current `--hosts-file` (default: `/etc/hosts`).
+- **REST API** limits request bodies to 64 KB and concurrent connections to 32.
 
 ## Safety
 
