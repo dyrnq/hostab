@@ -6,7 +6,7 @@ pub mod verify;
 
 use crate::core::model::Row;
 
-use clap::{Parser, Subcommand, ValueHint, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum, ValueHint};
 use std::path::PathBuf;
 
 use crate::store::file::DEFAULT_HOSTS_PATH;
@@ -79,7 +79,7 @@ pub enum Commands {
         target: Option<PathBuf>,
     },
 
-/// Generate shell completion scripts
+    /// Generate shell completion scripts
     Completion {
         /// Shell to generate completion for
         shell: Shell,
