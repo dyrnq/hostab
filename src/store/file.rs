@@ -42,10 +42,6 @@ impl Store {
     /// Save entries atomically
     pub fn save(&self, entries: &[Entry]) -> io::Result<()> {
         validation::validate_secure_path(&self.path)?;
-        // Snapshot original permissions before creating/removing any files
-        let orig_perms = fs::metadata(&self.path)
-            .ok()
-            .map(|m| m.permissions().mode());
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -61,6 +57,9 @@ impl Store {
         {
             // Preserve original file permissions so regular users can still read
             // /etc/hosts after root saves it. Default to 0644 if file doesn't exist.
+            let orig_perms = fs::metadata(&self.path)
+                .ok()
+                .map(|m| m.permissions().mode());
             let mode = orig_perms.unwrap_or(0o100644);
             let perms = Permissions::from_mode(mode & 0o777);
             tmp.as_file()
