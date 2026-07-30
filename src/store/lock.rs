@@ -3,7 +3,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// File-based lock using flock (Unix) or file locking (cross-platform via fs2)
+/// File-based lock using flock (Unix) or file locking (cross-platform via fs4)
 pub struct FileLock {
     lock_path: PathBuf,
     lock_file: Option<File>,
@@ -22,7 +22,7 @@ impl FileLock {
     /// Acquire an exclusive lock, blocking until available
     pub fn lock(&mut self) -> io::Result<()> {
         let file = File::create(&self.lock_path)?;
-        fs2::FileExt::lock_exclusive(&file)?;
+        fs4::FileExt::lock(&file)?;
         self.lock_file = Some(file);
         Ok(())
     }
@@ -31,12 +31,13 @@ impl FileLock {
     #[allow(dead_code)]
     pub fn try_lock(&mut self) -> io::Result<bool> {
         let file = File::create(&self.lock_path)?;
-        match fs2::FileExt::try_lock_exclusive(&file) {
+        match fs4::FileExt::try_lock(&file) {
             Ok(()) => {
                 self.lock_file = Some(file);
                 Ok(true)
             }
-            Err(_) => Ok(false),
+            Err(fs4::TryLockError::WouldBlock) => Ok(false),
+            Err(fs4::TryLockError::Error(e)) => Err(e),
         }
     }
 
@@ -61,7 +62,7 @@ impl FileLock {
     /// Release the lock
     pub fn unlock(&mut self) -> io::Result<()> {
         if let Some(file) = self.lock_file.take() {
-            fs2::FileExt::unlock(&file)?;
+            fs4::FileExt::unlock(&file)?;
             drop(file);
             // Try to clean up the lock file
             let _ = fs::remove_file(&self.lock_path);
