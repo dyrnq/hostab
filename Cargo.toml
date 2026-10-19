@@ -21,7 +21,7 @@ tabled = "0.22"
 fs4 = "1.1"
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
-ureq = { version = "3", features = ["json"] }
+ureq = { version = "3.4", features = ["json"] }
 libc = "0.2"
 axum = "0.8"
 tower-http = { version = "0.7", features = ["cors", "limit"] }
