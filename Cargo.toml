@@ -29,7 +29,7 @@ tower = { version = "0.5", features = ["limit"] }
 utoipa = { version = "6", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "10", features = ["axum", "vendored"] }
 hickory-resolver = "0.26"
-tokio = { version = "1.53", features = ["rt", "net", "macros"] }
+tokio = { version = "1.54", features = ["rt", "net", "macros"] }
 
 tempfile = "3.27"
 
