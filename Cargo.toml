@@ -21,13 +21,13 @@ tabled = "0.22"
 fs4 = "1.1"
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
-ureq = { version = "3.4", features = ["json"] }
+ureq = { version = "3.5", features = ["json"] }
 libc = "0.2"
 axum = "0.8"
 tower-http = { version = "0.7", features = ["cors", "limit"] }
 tower = { version = "0.5", features = ["limit"] }
 utoipa = { version = "6", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "10", features = ["axum", "vendored"] }
+utoipa-swagger-ui = { version = "10.0.2", features = ["axum", "vendored"] }
 hickory-resolver = "0.26"
 tokio = { version = "1.54", features = ["rt", "net", "macros"] }
 
